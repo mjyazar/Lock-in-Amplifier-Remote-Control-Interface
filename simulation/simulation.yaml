@@ -1,0 +1,22 @@
+spec: "1.1"
+devices:
+  SR830:
+    eom:
+      GPIB INSTR:
+        q: "\n"
+        r: "\n"
+    dialogues:
+      - q: "FREQ?" 
+        r: "1000.00"
+      - q: "OUTP? 1"
+        r: "0.001234"
+      - q: "OUTP? 2"
+        r: "0.000567"
+      - q: "OUTP? 3"
+        r: "0.001357"
+      - q: "SENS?"
+        r: "10"
+
+resources:
+  "GPIB::8::INSTR":
+    device: SR830
