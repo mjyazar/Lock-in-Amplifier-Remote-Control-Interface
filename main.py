@@ -1,3 +1,12 @@
-import pyvisa
+import config
+from amplifier.sr830 import SR830
 
-rm = pyvisa.ResourceManager()
+
+def main():
+    
+    with SR830(config.INTERFACE, backend=config.BACKEND, timeout_ms=config.TIME_OUT_MS) as amp:
+        print("connected to: ", amp.query("*IDN?"))
+        
+
+if __name__ == "__main__":
+    main()
