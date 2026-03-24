@@ -6,7 +6,9 @@ devices:
         q: "\n"
         r: "\n"
     dialogues:
-      - q: "FREQ?" 
+      - q: "*IDN?"
+        r: "Stanford_Research_Systems,SR830,s/n00001,ver1.07"
+      - q: "FREQ?"
         r: "1000.00"
       - q: "OUTP? 1"
         r: "0.001234"
@@ -18,5 +20,5 @@ devices:
         r: "10"
 
 resources:
-  "GPIB::8::INSTR":
+  "GPIB::1::INSTR":
     device: SR830
