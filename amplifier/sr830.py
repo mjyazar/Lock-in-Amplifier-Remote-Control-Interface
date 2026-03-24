@@ -1,5 +1,4 @@
 import pyvisa
-import time
 
 class SR830:
     
@@ -21,29 +20,47 @@ class SR830:
         16: ['1ks', 1e3],    17: ['3ks', 3e3],    18: ['10ks', 1e4],   19: ['30ks',	3e4],
     }
     
+    FILTER_SLOPE: dict = {0: 6, 
+                          1: 12, 
+                          2: 18, 
+                          3: 24}
+
+    RESERVE_MODE: dict = {0: "High Reserve",
+                          1: "Normal",
+                          2: "Low Noise"}
+    
+    
     def __init__(self, connection,  backend, timeout_ms=5000):
         self.connection = connection
         self.backend = backend # 
         self._timeout_ms = timeout_ms # operation timeout in milliseconds
-        
+        self.amplifier = None
     
+    
+    # -----------
+    # Connections
+    # -----------
     def connect(self):
-        "Connect to the SR830 lock-in amplifier using the VISA connection"
-
+        """
+        Connect to the SR830 lock-in amplifier using the VISA connection
+        """
         # argument '@py' if using pyvisa-py (if no NI-VISA installed)
         #rm = pyvisa.ResourceManager()
         
-        while self.amplifier == None:
-            print("Trying to connect to SR830...")
-            rm = pyvisa.ResourceManager(self.backend)
-            self.amplifier = rm.open_resource(self.connection)
-            time.sleep(1)
+        print("Trying to connect to SR830...")
+        rm = pyvisa.ResourceManager(self.backend)
+        self.amplifier = rm.open_resource(self.connection)
+        
+        self.amplifier.write_termination = "\n"
+        self.amplifier.read_termination  = "\n"
         
         print("Connected to: ", self.amplifier.query("*IDN?"))
-        
+    
     
     def disconnect(self):
-        "Disconnect from the SR830 lock-in amplifier."
+        """
+        Disconnect from the SR830 lock-in amplifier.
+        """
         pass
     
     
@@ -52,30 +69,329 @@ class SR830:
         return self
     
     
-    def __exit__(self):
+    def __exit__(self, exc_type, exc_val, exc_tb):
         self.disconnect()
-                             
-                             
+    
+    
+    # --------------
+    # Communications
+    # --------------
     def query(self, command):
-        "Send a query command to the SR830 and return the response."
+        """
+        Send a query command to the SR830 and return the response.
+        """
         response = self.amplifier.query(command)
         return response
     
     
     def write(self, command):
-        "Send a write command to the SR830."
+        """
+        Send a write command to the SR830.
+        """
         self.amplifier.write(command)
+    
+    
+    # ----------------------------
+    # REFERENCE and PHASE COMMANDS
+    # ----------------------------
+    def phase(self):
+        # Get the reference phase shift
+        return float(self.query("PHAS?"))
+    
+    def set_phase(self, phase):
+        """
+        Set the reference phase shift in degrees
+        The value of x will be rounded to 0.01°
+        Limited to -360 ≤ x ≤ 729.99 degrees and wrapped around at ±180°
+        For example, the PHAS 541.0 command will set the phase to -179.00° (541-360=181=-179)
+        """
+        if not -360 <= phase <= 729.99:
+            raise ValueError(f"Phase shift {phase} out of range (-360 to 729.99 degrees).")
+        self.write(f"PHAS {phase}")
+    
+    
+    def reference_source(self):
+        # Get the reference source
+        return int(self.query("FMOD?"))
+    
+    def set_reference_source(self, i):
+        """
+        Set the reference source
+        Internal (i=1)
+        External (i=0)
+        """
+        if i not in [0, 1]:
+            raise ValueError(f"Reference source {i} out of range (0 or 1).")
         
-            
-    """
-    print(self.amplifier.query("FREQ?"))
+        self.write(f"FMOD {i}")
+    
+    
+    def frequency(self):
+        # Get the reference frequency
+        return float(self.query("FREQ?"))
+    
+    def set_frequency(self, frequency):
+        """
+        Sets the frequency of the internal oscillator
+        The value of f will be rounded to 5 digits or 0.0001 Hz, whichever is greater
+        Limited to 0.001 ≤ f ≤ 102000.
+        If the harmonic number is greater than 1, then the frequency is 
+        limited to nxf ≤ 102 kHz where n is the harmonic number
+        """
+        if not 0.001 <= frequency <= 102_000:
+            raise ValueError(f"Frequency {frequency} Hz out of range (0.001 - 102,000 Hz).")
+        
+        self.write(f"FREQ {frequency}")
+        
 
-    self.amplifier.write("OFLT 10")
-    print(self.amplifier.query("OFLT ?"))
+    def reference_trigger(self):
+        # Get the reference trigger mode
+        return int(self.query("RSLP?"))
 
-    self.amplifier.write("SENS 11")
-    print(self.amplifier.query("SENS ?"))
+    def set_reference_trigger(self, i):
+        """
+        Set the reference trigger mode
+        Sine zero crossing (i=0)
+        TTL rising edge (i=1)
+        TTL falling edge (i=2). 
+        At frequencies below 1 Hz, the a TTL reference must be used
+        """
+        
+        if i not in [0, 1, 2]:
+            raise ValueError(f"Reference trigger {i} out of range (0, 1, or 2).")
+        
+        self.write(f"RSLP {i}")
+    
+    
+    def detection_harmonic(self):
+        # Get the detection harmonic
+        return int(self.query("HARM?"))
+    
+    def set_detection_harmonic(self, i):
+        """
+        Set the lock-in to detect at the ith harmonic of the reference frequency
+        i ranges from 1 to 19999
+        i is limited by ixf ≤ 102 kHz
+        If the value of i requires a detection frequency greater than 102 kHz, then the 
+        harmonic number will be set to the largest value of i such that ixf ≤ 102 kHz
+        """
+        self.write(f"HARM {i}")
+    
+    
+    def sine_amplitude(self):
+        # Get the amplitude of the sine output
+        return float(self.query("SLVL?"))
+    
+    def set_sine_amplitude(self, x):
+        """
+        Set the amplitude of the sine output
+        x is voltage in Volts
+        Limited to 0.004 ≤ x ≤ 5.000
+        x will be rounded to 0.002V
+        """
+        if not 0 <= x <= 5:
+            raise ValueError(f"Sine amplitude {x} out of range (0 - 5 V).")
+        
+        self.write(f"SLVL {x}")
+        
+    
+    # -------------------------
+    # INPUT and FILTER COMMANDS
+    # -------------------------
+    def input_configuration(self):
+        # Get the input configuration
+        return int(self.query("ICFG?"))
+    
+    def set_input_configuration(self, i):
+        """
+        Set the input configuration
+        i = 0: A
+        i = 1: A-B
+        i = 2: I (1 MΩ)
+        i = 3: I (100 MΩ)
+        """
+        if i not in [0, 1, 2, 3]:
+            raise ValueError(f"Input configuration {i} out of range (0-3).")
+        
+        self.write(f"ICFG {i}")
+    
+    
+    def input_shield_grounding(self):
+        # Get the input shield grounding
+        return int(self.query("IGND?"))
+    
+    def set_input_shield_grounding(self, i):
+        """
+        Set the input shield grounding
+        i = 0: Float
+        i = 1: Ground
+        """
+        if i not in [0, 1]:
+            raise ValueError(f"Input shield grounding {i} out of range (0 or 1).")
+        
+        self.write(f"IGND {i}")
+        
+    
+    def input_coupling(self):
+        # Get the input coupling
+        return int(self.query("ICPL?"))
+    
+    def set_input_coupling(self, i):
+        """
+        Set the input coupling
+        i = 0: AC
+        i = 1: DC
+        """
+        if not i in [0, 1]:
+            raise ValueError(f"Input coupling {i} out of range (0 or 1).")
+        
+        self.write(f"ICPL {i}")
+    
+    
+    def input_line_notch_filter(self):
+        # Get the input line notch filter status
+        return int(self.query("ILIN?"))
+    
+    def set_input_line_notch_filter(self, i):
+        """
+        Set the input line notch filter status
+        i = 0: Out or no filters
+        i = 1: Line notch in
+        i = 2: 2xLine notch in
+        i = 3: Both notch filters in
+        """
+        if i not in [0, 1, 2, 3]:
+            raise ValueError(f"Input line notch filter {i} out of range (0-3).")
+        
+        self.write(f"ILIN {i}")
+        
 
-    self.amplifier.write("SYNC 1")
-    print(self.amplifier.query("SYNC ?"))
-    """
+    # -------------------------------
+    # GAIN and TIME CONSTANT COMMANDS
+    # -------------------------------
+    def sensitivity(self):
+        # Get the sensitivity
+        return int(self.query("SENS?"))
+
+    def set_sensitivity(self, i):
+        """
+        Set the sensitivity
+        i ranges from 0 to 26, values are given in the SENSITIVITY dictionary
+        """
+        if i not in self.SENSITIVITY:
+            raise ValueError(f"Sensitivity {i} out of range (0-26).")
+        
+        self.write(f"SENS {i}")
+        
+
+    def reserve_mode(self):
+        # Get the reserve mode
+        return int(self.query("RMOD?"))
+    
+    def set_reserve_mode(self, i):
+        """
+        Set the reserve mode
+        i = 0: High Reserve
+        i = 1: Normal
+        i = 2: Low Noise (minimum)
+        """
+        
+        if i not in self.RESERVE_MODE:
+            raise ValueError(f"Reserve mode {i} out of range (0, 1, or 2).")
+        
+        self.write(f"RMOD {i}")
+        
+    
+    def time_constant(self):
+        # Get the time constant
+        return int(self.query("OFLT?"))
+    
+    def set_time_constant(self, i):
+        """
+        Set the time constant
+        i ranges from 0 to 19, values are given in the TIME_CONSTANT dictionary
+        
+        Time constants greater than 30s may NOT be set if the harmonic 
+        x ref. frequency (detection frequency) exceeds 200 Hz.
+        """
+        if i not in self.TIME_CONSTANT:
+            raise ValueError(f"Time constant {i} out of range (0-19).")
+        
+        self.write(f"OFLT {i}")
+
+    
+    def low_pass_filter_slope(self):
+        # Get the low pass filter slope
+        return int(self.query("OFSL?"))
+    
+    def set_low_pass_filter_slope(self, i):
+        """
+        Set the low pass filter slope
+        i = 0: 6 dB/octave
+        i = 1: 12 dB/octave
+        i = 2: 18 dB/octave
+        i = 3: 24 dB/octave
+        """
+        if i not in self.FILTER_SLOPE:
+            raise ValueError(f"Low pass filter slope {i} out of range (0-3).")
+        
+        self.write(f"OFSL {i}")
+        
+    
+    def synchronous_filter(self):
+        # Get the synchronous filter status
+        return int(self.query("SYNC?"))
+    
+    def set_synchronous_filter(self, i):
+        """
+        Set the synchronous filter status
+        i = 0: Off
+        i = 1: Synchronous filtering below 200 Hz
+        Synchronous filtering is turned on only if the detection frequency 
+        (reference x harmonic number) is less than 200 Hz.
+        """
+        if i not in [0, 1]:
+            raise ValueError(f"Synchronous filter {i} out of range (0 or 1).")
+        
+        self.write(f"SYNC {i}")
+    
+    
+    # ---------------------------
+    # DISPLAY and OUTPUT COMMANDS
+    # ---------------------------
+    
+    
+    
+    # -----------------------------
+    # AUX INPUT and OUTPUT COMMANDS
+    # -----------------------------
+    
+    
+    
+    # --------------
+    # SETUP COMMANDS
+    # --------------
+    
+    
+    
+    # --------------
+    # AUTO FUNCTIONS
+    # --------------
+
+
+
+    # ---------------------
+    # DATA STORAGE COMMANDS
+    # ---------------------
+    
+    
+    
+    # ----------------------
+    # DATA TRANSFER COMMANDS
+    # ----------------------
+    
+    
+    
+    # -------------------------
+    # STATUS REPORTING COMMANDS
+    # -------------------------
