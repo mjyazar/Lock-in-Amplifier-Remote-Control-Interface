@@ -4,7 +4,7 @@
 BACKEND = 'simulation/simulation.yaml@sim'
 
 # change to match resource name on amplifier, e.g. "GPIB0::1::INSTR" instead of "GPIB0::8::INSTR"
-INTERFACE = 'GPIB::8::INSTR'
+INTERFACE = 'GPIB::1::INSTR'
 
 # any operation longer than this will raise a timeout error (in milliseconds)
-TIME_OUT_MS = 5000 
+TIME_OUT_MS = 10000 
