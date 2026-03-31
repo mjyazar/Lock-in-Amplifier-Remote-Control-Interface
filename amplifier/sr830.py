@@ -97,23 +97,34 @@ class SR830:
     def phase(self):
         # Get the reference phase shift
         return float(self.query("PHAS?"))
-    
-    def set_phase(self, phase):
+
+    def set_phase(self):
         """
         Set the reference phase shift in degrees
         The value of x will be rounded to 0.01°
         Limited to -360 ≤ x ≤ 729.99 degrees and wrapped around at ±180°
         For example, the PHAS 541.0 command will set the phase to -179.00° (541-360=181=-179)
         """
-        if not -360 <= phase <= 729.99:
-            raise ValueError(f"Phase shift {phase} out of range (-360 to 729.99 degrees).")
-        self.write(f"PHAS {phase}")
-    
-    
+
+        try:
+            phase = float(input("Phase shift (-360 to 729.99 degrees): "))
+
+            if phase < -360 or phase > 729.99:
+                print(f"Phase shift {phase} out of range (-360 to 729.99 degrees).")
+
+            self.write(f"PHAS {phase}")
+
+            return phase
+
+        except ValueError:
+            print("Invalid input: phase shift must be a number.")
+
+
     def reference_source(self):
         # Get the reference source
         return int(self.query("FMOD?"))
-    
+
+
     def set_reference_source(self, i):
         """
         Set the reference source
@@ -124,6 +135,8 @@ class SR830:
             raise ValueError(f"Reference source {i} out of range (0 or 1).")
         
         self.write(f"FMOD {i}")
+
+        return self.reference_source()
     
     
     def frequency(self):
@@ -156,7 +169,6 @@ class SR830:
         TTL falling edge (i=2). 
         At frequencies below 1 Hz, the a TTL reference must be used
         """
-        
         if i not in [0, 1, 2]:
             raise ValueError(f"Reference trigger {i} out of range (0, 1, or 2).")
         
@@ -365,7 +377,29 @@ class SR830:
     # -----------------------------
     # AUX INPUT and OUTPUT COMMANDS
     # -----------------------------
+    def aux_input(self):
+        # Get the aux input voltages in Volts
+        return float(self.query("OAUX?"))
     
+
+    def aux_output(self):
+        # Get the aux output voltage in Volts
+        return float(self.query("AUXV?"))
+
+    def set_aux_output(self, i, x):
+        """
+        Set the aux output voltage in Volts
+        i selects an Aux Output (1, 2, 3 or 4)
+        x is the output voltage to set
+        Limited to -10.500 ≤ x ≤ 10.500
+        """
+        if i not in [1, 2, 3, 4]:
+            raise ValueError(f"Aux output {i} out of range (1-4).")
+        
+        if not -10.5 <= x <= 10.5:
+            raise ValueError(f"Aux output voltage {x} out of range (-10.5 - 10.5 V).")
+
+        self.write(f"AUXV {i} {x}")
     
     
     # --------------
@@ -377,8 +411,7 @@ class SR830:
     # --------------
     # AUTO FUNCTIONS
     # --------------
-
-
+ 
 
     # ---------------------
     # DATA STORAGE COMMANDS
@@ -395,3 +428,4 @@ class SR830:
     # -------------------------
     # STATUS REPORTING COMMANDS
     # -------------------------
+    
