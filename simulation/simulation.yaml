@@ -8,6 +8,8 @@ devices:
     dialogues:
       - q: "PHAS?"
         r: "180.00"
+      - q: "FMOD?"
+        r: "1"
       - q: "*IDN?"
         r: "Stanford_Research_Systems,SR830,s/n00001,ver1.07"
       - q: "FREQ?"
