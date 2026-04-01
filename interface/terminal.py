@@ -96,10 +96,14 @@ def simulation(amp):
                 continue
 
             elif opt == 1:
-                amp.reference_source()
+                ref_source = amp.reference_source()
+                print(f"Reference source: {ref_source}")
+                time.sleep(sleep)
 
             elif opt == 2:
-                amp.set_reference_source()
+                ref_source = amp.set_reference_source()
+                print(f"Reference source set to: {ref_source}")
+                time.sleep(sleep)
 
 
         elif nav == 3:
@@ -110,6 +114,7 @@ def simulation(amp):
                 amp.frequency()
             elif opt == 2:
                 amp.set_frequency()
+
 
         elif nav == 4:
             opt = function_options("Reference Trigger")
