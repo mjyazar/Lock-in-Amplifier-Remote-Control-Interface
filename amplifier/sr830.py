@@ -109,36 +109,45 @@ class SR830:
         try:
             phase = float(input("Phase shift (-360 to 729.99 degrees): "))
 
-            if phase < -360 or phase > 729.99:
-                print(f"Phase shift {phase} out of range (-360 to 729.99 degrees).")
-
-            self.write(f"PHAS {phase}")
-
-            return phase
-
         except ValueError:
             print("Invalid input: phase shift must be a number.")
+            return
 
+        if phase < -360 or phase > 729.99:
+            print(f"Phase shift {phase} out of range (-360 to 729.99 degrees).")
+            return
+
+        self.write(f"PHAS {phase}")
+
+        return phase
 
     def reference_source(self):
         # Get the reference source
         return int(self.query("FMOD?"))
 
 
-    def set_reference_source(self, i):
+    def set_reference_source(self):
         """
         Set the reference source
         Internal (i=1)
         External (i=0)
         """
-        if i not in [0, 1]:
-            raise ValueError(f"Reference source {i} out of range (0 or 1).")
-        
-        self.write(f"FMOD {i}")
 
+        try:
+            i = int(input("Reference source (0: External, 1: Internal): "))
+        
+        except ValueError:
+            print("Reference source must be 0 or 1.")
+            return
+
+        if i not in [0, 1]:
+            print(f"Reference source {i} out of range (0 or 1).")
+            return
+
+        self.write(f"FMOD {i}")
         return self.reference_source()
-    
-    
+
+
     def frequency(self):
         # Get the reference frequency
         return float(self.query("FREQ?"))
