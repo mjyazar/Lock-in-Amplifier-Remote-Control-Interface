@@ -1,5 +1,5 @@
 import config
-import simulation.terminal as terminal
+import interface.terminal as terminal
 from amplifier.sr830 import SR830
 
 
