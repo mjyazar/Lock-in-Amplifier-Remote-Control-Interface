@@ -102,7 +102,7 @@ class SR830:
     # Communications
     # --------------
     def _check_connection(self):
-        if self._instrument is None:
+        if self._amplifier is None:
             raise SR830Error("Not connected to SR830 amplifier. Call connect() first.")
 
 
@@ -134,9 +134,9 @@ class SR830:
     # ----------------------------
     def phase(self):
         # Get the reference phase shift
-        return float(self.query("PHAS?"))
+        return float(self._query("PHAS?"))
 
-    def set_phase(self):
+    def set_phase(self, phase):
         """
         Set the reference phase shift in degrees
         The value of x will be rounded to 0.01°
@@ -144,26 +144,17 @@ class SR830:
         For example, the PHAS 541.0 command will set the phase to -179.00° (541-360=181=-179)
         """
 
-        try:
-            phase = float(input("Phase shift (-360 to 729.99 degrees): "))
+        if not -360.0 <= phase <= 729.99:
+            raise ValueError(f"Phase {phase} out of range (-360 to +729.99 degrees).")
 
-        except ValueError:
-            print("Invalid input: phase shift must be a number.")
-            return
-
-        if phase < -360 or phase > 729.99:
-            print(f"Phase shift {phase} out of range (-360 to 729.99 degrees).")
-            return
-
-        self.write(f"PHAS {phase}")
-
-        return phase
+        self._write(f"PHAS {phase:.2f}")
+ 
+        logger.info(f"Phase set to {phase:.2f} degrees")
 
 
     def reference_source(self):
         # Get the reference source
-        return int(self.query("FMOD?"))
-
+        return int(self._query("FMOD?"))
 
     def set_reference_source(self, i):
         """
@@ -174,13 +165,13 @@ class SR830:
         if i not in [0, 1]:
             raise ValueError(f"Reference source {i} out of range (0 or 1).")
         
-        self.write(f"FMOD {i}")
-        return self.write
+        self._write(f"FMOD {i}")
+        logger.info("Reference source set to %s", "Internal" if i else "External")
 
 
     def frequency(self):
         # Get the reference frequency
-        return float(self.query("FREQ?"))
+        return float(self._query("FREQ?"))
     
     def set_frequency(self, frequency):
         """
@@ -193,12 +184,13 @@ class SR830:
         if not 0.001 <= frequency <= 102_000:
             raise ValueError(f"Frequency {frequency} Hz out of range (0.001 - 102,000 Hz).")
         
-        self.write(f"FREQ {frequency}")
-        
+        self._write(f"FREQ {frequency:.4f}")
+        logger.info(f"Frequency set to {frequency:.4f} Hz")
+
 
     def reference_trigger(self):
         # Get the reference trigger mode
-        return int(self.query("RSLP?"))
+        return int(self._query("RSLP?"))
 
     def set_reference_trigger(self, i):
         """
@@ -211,12 +203,12 @@ class SR830:
         if i not in [0, 1, 2]:
             raise ValueError(f"Reference trigger {i} out of range (0, 1, or 2).")
         
-        self.write(f"RSLP {i}")
+        self._write(f"RSLP {i}")
     
     
     def detection_harmonic(self):
         # Get the detection harmonic
-        return int(self.query("HARM?"))
+        return int(self._query("HARM?"))
     
     def set_detection_harmonic(self, i):
         """
@@ -226,12 +218,12 @@ class SR830:
         If the value of i requires a detection frequency greater than 102 kHz, then the 
         harmonic number will be set to the largest value of i such that ixf ≤ 102 kHz
         """
-        self.write(f"HARM {i}")
+        self._write(f"HARM {i}")
     
     
     def sine_amplitude(self):
         # Get the amplitude of the sine output
-        return float(self.query("SLVL?"))
+        return float(self._query("SLVL?"))
     
     def set_sine_amplitude(self, x):
         """
@@ -243,7 +235,7 @@ class SR830:
         if not 0 <= x <= 5:
             raise ValueError(f"Sine amplitude {x} out of range (0 - 5 V).")
         
-        self.write(f"SLVL {x}")
+        self._write(f"SLVL {x}")
         
     
     # -------------------------
@@ -251,7 +243,7 @@ class SR830:
     # -------------------------
     def input_configuration(self):
         # Get the input configuration
-        return int(self.query("ICFG?"))
+        return int(self._query("ISRC?"))
     
     def set_input_configuration(self, i):
         """
@@ -264,12 +256,12 @@ class SR830:
         if i not in [0, 1, 2, 3]:
             raise ValueError(f"Input configuration {i} out of range (0-3).")
         
-        self.write(f"ICFG {i}")
+        self._write(f"ISRC {i}")
     
     
     def input_shield_grounding(self):
         # Get the input shield grounding
-        return int(self.query("IGND?"))
+        return int(self._query("IGND?"))
     
     def set_input_shield_grounding(self, i):
         """
@@ -280,12 +272,12 @@ class SR830:
         if i not in [0, 1]:
             raise ValueError(f"Input shield grounding {i} out of range (0 or 1).")
         
-        self.write(f"IGND {i}")
+        self._write(f"IGND {i}")
         
     
     def input_coupling(self):
         # Get the input coupling
-        return int(self.query("ICPL?"))
+        return int(self._query("ICPL?"))
     
     def set_input_coupling(self, i):
         """
@@ -296,12 +288,12 @@ class SR830:
         if not i in [0, 1]:
             raise ValueError(f"Input coupling {i} out of range (0 or 1).")
         
-        self.write(f"ICPL {i}")
+        self._write(f"ICPL {i}")
     
     
     def input_line_notch_filter(self):
         # Get the input line notch filter status
-        return int(self.query("ILIN?"))
+        return int(self._query("ILIN?"))
     
     def set_input_line_notch_filter(self, i):
         """
@@ -314,7 +306,7 @@ class SR830:
         if i not in [0, 1, 2, 3]:
             raise ValueError(f"Input line notch filter {i} out of range (0-3).")
         
-        self.write(f"ILIN {i}")
+        self._write(f"ILIN {i}")
         
 
     # -------------------------------
@@ -322,7 +314,7 @@ class SR830:
     # -------------------------------
     def sensitivity(self):
         # Get the sensitivity
-        return int(self.query("SENS?"))
+        return int(self._query("SENS?"))
 
     def set_sensitivity(self, i):
         """
@@ -332,12 +324,12 @@ class SR830:
         if i not in self.SENSITIVITY:
             raise ValueError(f"Sensitivity {i} out of range (0-26).")
         
-        self.write(f"SENS {i}")
+        self._write(f"SENS {i}")
         
 
     def reserve_mode(self):
         # Get the reserve mode
-        return int(self.query("RMOD?"))
+        return int(self._query("RMOD?"))
     
     def set_reserve_mode(self, i):
         """
@@ -350,12 +342,12 @@ class SR830:
         if i not in self.RESERVE_MODE:
             raise ValueError(f"Reserve mode {i} out of range (0, 1, or 2).")
         
-        self.write(f"RMOD {i}")
+        self._write(f"RMOD {i}")
         
     
     def time_constant(self):
         # Get the time constant
-        return int(self.query("OFLT?"))
+        return int(self._query("OFLT?"))
     
     def set_time_constant(self, i):
         """
@@ -368,12 +360,12 @@ class SR830:
         if i not in self.TIME_CONSTANT:
             raise ValueError(f"Time constant {i} out of range (0-19).")
         
-        self.write(f"OFLT {i}")
+        self._write(f"OFLT {i}")
 
     
     def low_pass_filter_slope(self):
         # Get the low pass filter slope
-        return int(self.query("OFSL?"))
+        return int(self._query("OFSL?"))
     
     def set_low_pass_filter_slope(self, i):
         """
@@ -386,12 +378,12 @@ class SR830:
         if i not in self.FILTER_SLOPE:
             raise ValueError(f"Low pass filter slope {i} out of range (0-3).")
         
-        self.write(f"OFSL {i}")
+        self._write(f"OFSL {i}")
         
     
     def synchronous_filter(self):
         # Get the synchronous filter status
-        return int(self.query("SYNC?"))
+        return int(self._query("SYNC?"))
     
     def set_synchronous_filter(self, i):
         """
@@ -404,7 +396,7 @@ class SR830:
         if i not in [0, 1]:
             raise ValueError(f"Synchronous filter {i} out of range (0 or 1).")
         
-        self.write(f"SYNC {i}")
+        self._write(f"SYNC {i}")
     
     
     # ---------------------------
@@ -418,12 +410,12 @@ class SR830:
     # -----------------------------
     def aux_input(self):
         # Get the aux input voltages in Volts
-        return float(self.query("OAUX?"))
+        return float(self._query("OAUX?"))
     
 
     def aux_output(self):
         # Get the aux output voltage in Volts
-        return float(self.query("AUXV?"))
+        return float(self._query("AUXV?"))
 
     def set_aux_output(self, i, x):
         """
@@ -438,7 +430,7 @@ class SR830:
         if not -10.5 <= x <= 10.5:
             raise ValueError(f"Aux output voltage {x} out of range (-10.5 - 10.5 V).")
 
-        self.write(f"AUXV {i} {x}")
+        self._write(f"AUXV {i} {x}")
     
     
     # --------------
@@ -450,6 +442,7 @@ class SR830:
     # --------------
     # AUTO FUNCTIONS
     # --------------
+    
  
 
     # ---------------------
