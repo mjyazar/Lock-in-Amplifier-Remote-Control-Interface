@@ -49,10 +49,16 @@ def setup_logging():
 def main():
     setup_logging()
     logger = logging.getLogger(__name__)
+
+    logger.info("Starting Lock-in Amplifier Control Interface")
+    logger.info("Backend  : %s", config.BACKEND or "(NI-VISA auto-detect)")
+    logger.info("Resource : %s", config.INTERFACE)
     
     with SR830(config.INTERFACE, backend=config.BACKEND, timeout_ms=config.TIME_OUT_MS) as amp:
         return terminal.simulation(amp)
         
+    logger.info("Program exited successfully.")
+
 
 if __name__ == "__main__":
     main()
