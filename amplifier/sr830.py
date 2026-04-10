@@ -1,7 +1,20 @@
 import pyvisa
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+class SR830Error(Exception):
+    """
+    Raised for SR830-specific communication or configuration errors
+    """
+    pass
+
 
 class SR830:
-    
+    """
+    Driver for the SR830 DSP Lock-In Amplifier
+    """
     SENSITIVITY: dict = {
         0:  ['2nV', 2e-9],   1:  ['5nV', 5e-9],   2:  ['10nV', 1e-8],  3:  ['20nV', 2e-8],
         4:  ['50nV', 5e-8],  5:  ['100nV', 1e-7], 6:  ['200nV', 2e-7], 7:  ['500nV', 5e-7],
@@ -20,7 +33,7 @@ class SR830:
         16: ['1ks', 1e3],    17: ['3ks', 3e3],    18: ['10ks', 1e4],   19: ['30ks',	3e4],
     }
     
-    FILTER_SLOPE: dict = {0: 6, 
+    FILTER_SLOPE: dict = {0: 6, # dB/oct
                           1: 12, 
                           2: 18, 
                           3: 24}
@@ -30,13 +43,18 @@ class SR830:
                           2: "Low Noise"}
     
     
+    # -----------
+    # Constructor
+    # -----------
     def __init__(self, connection,  backend, timeout_ms=5000):
-        self.connection = connection
-        self.backend = backend # 
+        self._connection = connection
+        self._backend = backend # 
         self._timeout_ms = timeout_ms # operation timeout in milliseconds
-        self.amplifier = None
-    
-    
+        self._amplifier = None
+
+        logger.debug(f"SR830 Class created — connection: '{self._connection}', backend: '{self._backend or '(NI-VISA auto-detect)'}'")
+
+
     # -----------
     # Connections
     # -----------
@@ -44,24 +62,31 @@ class SR830:
         """
         Connect to the SR830 lock-in amplifier using the VISA connection
         """
-        # argument '@py' if using pyvisa-py (if no NI-VISA installed)
-        #rm = pyvisa.ResourceManager()
+        logger.info(f"Connecting to SR830 at '{self._connection}'...")
         
-        print("Trying to connect to SR830...")
-        rm = pyvisa.ResourceManager(self.backend)
-        self.amplifier = rm.open_resource(self.connection)
+        rm = pyvisa.ResourceManager(self._backend)
+        self._amplifier = rm.open_resource(self._connection)
+        self._amplifier.timeout = self._timeout_ms
+        self._amplifier.write_termination = "\n"
+        self._amplifier.read_termination  = "\n"
         
-        self.amplifier.write_termination = "\n"
-        self.amplifier.read_termination  = "\n"
-        
-        print("Connected to: ", self.amplifier.query("*IDN?"))
+        logger.info(f"Connected to: {self._amplifier.query('*IDN?')}")
     
-    
+
     def disconnect(self):
         """
-        Disconnect from the SR830 lock-in amplifier.
+        Disconnect from the SR830 lock-in amplifier, closing the VISA resource
         """
-        pass
+        if self._amplifier is not None:
+            try:
+                self._write("LOCL 0")
+
+            except Exception as e:
+                logger.warning(f"Could not release remote lock on disconnect: {e}")
+
+            self._amplifier.close()
+            self._amplifier = None
+            logger.info("Disconnected from SR830.")
     
     
     def __enter__(self):
@@ -76,19 +101,32 @@ class SR830:
     # --------------
     # Communications
     # --------------
-    def query(self, command):
+    def _check_connection(self):
+        if self._instrument is None:
+            raise SR830Error("Not connected to SR830 amplifier. Call connect() first.")
+
+
+    def _query(self, command):
         """
-        Send a query command to the SR830 and return the response.
+        Send a query command to the SR830 and return the response
         """
-        response = self.amplifier.query(command)
+        self._check_connection()
+
+        logger.debug(f"Query: '{command}'")
+        response = self._amplifier.query(command)
+        logger.debug(f"Response: '{response}'")
+
         return response
     
     
-    def write(self, command):
+    def _write(self, command):
         """
         Send a write command to the SR830.
         """
-        self.amplifier.write(command)
+        self._check_connection()
+
+        logger.debug(f"Write: '{command}'")
+        self._amplifier.write(command)
     
     
     # ----------------------------
@@ -121,31 +159,23 @@ class SR830:
 
         return phase
 
+
     def reference_source(self):
         # Get the reference source
         return int(self.query("FMOD?"))
 
 
-    def set_reference_source(self):
+    def set_reference_source(self, i):
         """
         Set the reference source
         Internal (i=1)
         External (i=0)
         """
-
-        try:
-            i = int(input("Reference source (0: External, 1: Internal): "))
-        
-        except ValueError:
-            print("Reference source must be 0 or 1.")
-            return
-
         if i not in [0, 1]:
-            print(f"Reference source {i} out of range (0 or 1).")
-            return
-
+            raise ValueError(f"Reference source {i} out of range (0 or 1).")
+        
         self.write(f"FMOD {i}")
-        return self.reference_source()
+        return self.write
 
 
     def frequency(self):

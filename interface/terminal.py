@@ -67,7 +67,8 @@ def simulation(amp):
         if nav == 0:
             print("Exiting...")
             break
-        
+
+
         # Phase shift
         elif nav == 1:
             opt = function_options("Phase")
@@ -87,10 +88,11 @@ def simulation(amp):
                 print(f"Phase set to: {phase} degrees")
                 time.sleep(sleep)
 
+
         # Reference Source
         elif nav == 2:
             opt = function_options("Reference Source")
-
+        
             if opt == 0:
                 display_menu()
                 continue
@@ -101,11 +103,23 @@ def simulation(amp):
                 time.sleep(sleep)
 
             elif opt == 2:
-                ref_source = amp.set_reference_source()
+                try:
+                    i = int(input("Reference source (0: External, 1: Internal): "))
+                
+                except ValueError:
+                    print("Reference source must be 0 or 1.")
+                    continue
+
+                if i not in [0, 1]:
+                    print(f"Reference source {i} out of range (0 or 1).")
+                    continue
+
+                ref_source = amp.set_reference_source(i)
                 print(f"Reference source set to: {ref_source}")
                 time.sleep(sleep)
 
 
+        # Freuency
         elif nav == 3:
             opt = function_options("Frequency")
             if opt == 0:
