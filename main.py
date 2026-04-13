@@ -8,13 +8,12 @@ from amplifier.sr830 import SR830
 
 def setup_logging():
     """
-    Configure the logging system for the whole application.
+    Configure the logging system for the whole application
  
-    Two handlers are set up:
-      1. Console — shows INFO and above in the terminal while running
-      2. File    — saves DEBUG and above (everything) to a log file
+    Console - shows INFO and above in the terminal while running
+    File - saves DEBUG and above (everything) to a log file
  
-    Log levels, from least to most severe:
+    Log levels:
         DEBUG    low-level detail (every VISA write/query)
         INFO     normal operational messages (connected, parameter set, etc.)
         WARNING  something unexpected but not fatal

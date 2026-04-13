@@ -75,16 +75,16 @@ def simulation(amp):
         # Phase shift
         elif nav == 1:
             opt = function_options("Phase")
- 
+
             if opt == 0:
                 pass
- 
+
             elif opt == 1:
                 phase = amp.phase()
                 print(f"\n  Phase: {phase} degrees")
                 logger.info("Read phase: %.2f degrees", phase)
                 time.sleep(PAUSE)
- 
+
             elif opt == 2:
                 print("  Range: -360 to +729.99 degrees")
                 try:
@@ -171,6 +171,7 @@ def simulation(amp):
 
                 time.sleep(PAUSE)
 
+
         # Reference Trigger
         elif nav == 4:
             opt = function_options("Reference Trigger")
@@ -185,7 +186,7 @@ def simulation(amp):
                 time.sleep(PAUSE)
  
             elif opt == 2:
-                print("  0 = Sine zero crossing  |  1 = TTL rising  |  2 = TTL falling")
+                print("  0 = Sine zero crossing\n  1 = TTL rising edge\n  2 = TTL falling edge")
 
                 try:
                     i = int(input("  Enter trigger mode (0, 1, or 2): "))
@@ -239,7 +240,37 @@ def simulation(amp):
 
         elif nav == 6:
             opt = function_options("Sine Amplitude")
+ 
+            if opt == 0:
+                pass
+ 
+            elif opt == 1:
+                amp_val = amp.sine_amplitude()
+                print(f"\n  Sine amplitude: {amp_val} Vrms")
+                logger.info(f"Read sine amplitude: {amp_val:.3f} Vrms")
+                time.sleep(PAUSE)
+ 
+            elif opt == 2:
+                print("  Range: 0.004 to 5.000 Vrms")
 
+                try:
+                    x = float(input("  Enter amplitude (Vrms): "))
+
+                except ValueError:
+                    print("  Invalid input — must be a number.")
+                    display_menu()
+                    continue
+
+                try:
+                    amp.set_sine_amplitude(x)
+                    print(f"  Sine amplitude set to: {x} Vrms")
+                    logger.info(f"Set sine amplitude: {x:.3f} Vrms")
+
+                except ValueError as e:
+                    print(f"  Error: {e}")
+                    logger.error(f"Failed to set sine amplitude: {e}")
+                time.sleep(PAUSE)
+ 
 
         elif nav == 7:
             opt = function_options("Input Configuration")
