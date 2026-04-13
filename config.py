@@ -1,4 +1,5 @@
 # Connection settings for SR830 lock-in amplifier
+TIME_OUT_MS = 10000
 
 """
 SIMULATION
@@ -15,4 +16,3 @@ Time Out: any operation longer than this will raise a timeout error (in millisec
 """
 BACKEND = ''
 INTERFACE = 'GPIB::8::INSTR'
-TIME_OUT_MS = 10000 
