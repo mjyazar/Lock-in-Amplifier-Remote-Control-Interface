@@ -6,22 +6,93 @@ devices:
         q: "\n"
         r: "\n"
     dialogues:
-      - q: "PHAS?"
-        r: "180.00"
-      - q: "FMOD?"
-        r: "1"
+      # Identification
       - q: "*IDN?"
         r: "Stanford_Research_Systems,SR830,s/n00001,ver1.07"
+
+      # Reference and Phase
+      - q: "PHAS?"
+        r: "0.00"
+      - q: "FMOD?"
+        r: "1"
       - q: "FREQ?"
-        r: "1000.00"
+        r: "1000.0000"
+      - q: "RSLP?"
+        r: "0"
+      - q: "HARM?"
+        r: "1"
+      - q: "SLVL?"
+        r: "0.0040"
+
+      # Input and Filter
+      - q: "ISRC?"
+        r: "0"
+      - q: "IGND?"
+        r: "0"
+      - q: "ICPL?"
+        r: "0"
+      - q: "ILIN?"
+        r: "0"
+
+      # Gain and Time Constant
+      - q: "SENS?"
+        r: "10"
+      - q: "RMOD?"
+        r: "1"
+      - q: "OFLT?"
+        r: "8"
+      - q: "OFSL?"
+        r: "1"
+      - q: "SYNC?"
+        r: "0"
+
+      # Individual output readings
       - q: "OUTP? 1"
         r: "0.001234"
       - q: "OUTP? 2"
         r: "0.000567"
       - q: "OUTP? 3"
         r: "0.001357"
-      - q: "SENS?"
-        r: "10"
+      - q: "OUTP? 4"
+        r: "12.3456"
+
+      # SNAP
+      - q: "SNAP? 1,2,3,4"
+        r: "0.001234,0.000567,0.001357,12.3456"
+
+      # Display config (DDEF) and display values (OUTR)
+      - q: "DDEF? 1"
+        r: "0,0"
+      - q: "DDEF? 2"
+        r: "1,0"
+      - q: "OUTR? 1"
+        r: "0.001234"
+      - q: "OUTR? 2"
+        r: "0.000567"
+
+      # Front panel output (FPOP)
+      - q: "FPOP? 1"
+        r: "0"
+      - q: "FPOP? 2"
+        r: "0"
+
+      # Aux inputs and outputs
+      - q: "OAUX? 1"
+        r: "0.0000"
+      - q: "OAUX? 2"
+        r: "0.0000"
+      - q: "OAUX? 3"
+        r: "0.0000"
+      - q: "OAUX? 4"
+        r: "0.0000"
+      - q: "AUXV? 1"
+        r: "0.0000"
+      - q: "AUXV? 2"
+        r: "0.0000"
+      - q: "AUXV? 3"
+        r: "0.0000"
+      - q: "AUXV? 4"
+        r: "0.0000"
 
 resources:
   "GPIB::1::INSTR":

@@ -1,6 +1,10 @@
 # Connection settings for SR830 lock-in amplifier
 TIME_OUT_MS = 10000
 
+
+DASH_PORT = 8050
+
+
 """
 SIMULATION
 """

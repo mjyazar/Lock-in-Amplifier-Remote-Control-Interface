@@ -1,3 +1,5 @@
+import threading
+
 import pyvisa
 import logging
 
@@ -16,13 +18,13 @@ class SR830:
     Driver for the SR830 DSP Lock-In Amplifier
     """
     SENSITIVITY: dict = {
-        0:  ['2nV', 2e-9],   1:  ['5nV', 5e-9],   2:  ['10nV', 1e-8],  3:  ['20nV', 2e-8],
-        4:  ['50nV', 5e-8],  5:  ['100nV', 1e-7], 6:  ['200nV', 2e-7], 7:  ['500nV', 5e-7],
-        8:  ['1uV', 1e-6],   9:  ['2uV', 2e-6],   10: ['5uV', 5e-6],   11: ['10uV', 1e-5],
-        12: ['20uV', 2e-5],  13: ['50uV', 5e-5],  14: ['100uV', 1e-4], 15: ['200uV', 2e-4],
-        16: ['500uV', 5e-4], 17: ['1mV', 1e-3],   18: ['2mV', 2e-3],   19: ['5mV', 5e-3],
-        20: ['10mV', 1e-2],  21: ['20mV', 2e-2],  22: ['50mV', 5e-2],  23: ['100mV', 1e-1],
-        24: ['200mV', 2e-1], 25: ['500mV', 5e-1], 26: ['1V', 1.0]
+        0:  ['2nV/fA', 2e-9],   1:  ['5nV/fA', 5e-9],   2:  ['10nV/fA', 1e-8],  3:  ['20nV/fA', 2e-8],
+        4:  ['50nV/fA', 5e-8],  5:  ['100nV/fA', 1e-7], 6:  ['200nV/fA', 2e-7], 7:  ['500nV/fA', 5e-7],
+        8:  ['1uV/pA', 1e-6],   9:  ['2uV/pA', 2e-6],   10: ['5uV/pA', 5e-6],   11: ['10uV/pA', 1e-5],
+        12: ['20uV/pA', 2e-5],  13: ['50uV/pA', 5e-5],  14: ['100uV/pA', 1e-4], 15: ['200uV/pA', 2e-4],
+        16: ['500uV/pA', 5e-4], 17: ['1mV/nA', 1e-3],   18: ['2mV/nA', 2e-3],   19: ['5mV/nA', 5e-3],
+        20: ['10mV/nA', 1e-2],  21: ['20mV/nA', 2e-2],  22: ['50mV/nA', 5e-2],  23: ['100mV/nA', 1e-1],
+        24: ['200mV/nA', 2e-1], 25: ['500mV/nA', 5e-1], 26: ['1V/µA', 1.0]
     }
     
     TIME_CONSTANT: dict = {
@@ -41,16 +43,27 @@ class SR830:
     RESERVE_MODE: dict = {0: "High Reserve",
                           1: "Normal",
                           2: "Low Noise"}
-    
-    
+
+    DISPLAY_PARAM: dict = {
+        0: "X", 1: "Y", 2: "R", 3: "θ", 4: "Noise",
+        5: "Aux In 1", 6: "Aux In 2", 7: "Aux In 3", 8: "Aux In 4",
+        9: "Aux Out 1", 10: "Aux Out 2", 11: "Phase", 12: "Mark",
+    }
+    DISPLAY_RATIO: dict = {
+        0: "None", 1: "Aux In 1", 2: "Aux In 2", 3: "Aux In 3", 4: "Aux In 4",
+    }
+    EXPAND: dict = {0: "×1", 1: "×10", 2: "×100"}
+
     # -----------
     # Constructor
     # -----------
     def __init__(self, connection,  backend, timeout_ms=5000):
         self._connection = connection
-        self._backend = backend # 
-        self._timeout_ms = timeout_ms # operation timeout in milliseconds
+        self._backend = backend
+        self._timeout_ms = timeout_ms  # operation timeout in milliseconds
         self._amplifier = None
+        self._rm = None
+        self._lock = threading.Lock()  # protect VISA from concurrent callback access
 
         logger.debug(f"SR830 Class created — connection: '{self._connection}', backend: '{self._backend or '(NI-VISA auto-detect)'}'")
 
@@ -63,13 +76,18 @@ class SR830:
         Connect to the SR830 lock-in amplifier using the VISA connection
         """
         logger.info(f"Connecting to SR830 at '{self._connection}'...")
-        
-        rm = pyvisa.ResourceManager(self._backend)
-        self._amplifier = rm.open_resource(self._connection)
+
+        self._rm = pyvisa.ResourceManager(self._backend)
+        self._amplifier = self._rm.open_resource(self._connection)
         self._amplifier.timeout = self._timeout_ms
         self._amplifier.write_termination = "\n"
         self._amplifier.read_termination  = "\n"
-        
+
+        # OUTX 1 routes all responses over GPIB (essential — without this all
+        # queries time out because the instrument sends replies to RS-232 by default).
+        # Use OUTX 0 for RS-232 connections.
+        self._amplifier.write("OUTX 1")
+
         logger.info(f"Connected to: {self._amplifier.query('*IDN?')}")
     
 
@@ -86,6 +104,9 @@ class SR830:
 
             self._amplifier.close()
             self._amplifier = None
+            if self._rm is not None:
+                self._rm.close()
+                self._rm = None
             logger.info("Disconnected from SR830.")
     
     
@@ -108,25 +129,26 @@ class SR830:
 
     def _query(self, command):
         """
-        Send a query command to the SR830 and return the response
+        Send a query command to the SR830 and return the response.
+        Thread-safe: acquires the instrument lock for the full query/response cycle.
         """
-        self._check_connection()
+        with self._lock:
+            self._check_connection()
+            logger.debug(f"Query: '{command}'")
+            response = self._amplifier.query(command)
+            logger.debug(f"Response: '{response}'")
+            return response
 
-        logger.debug(f"Query: '{command}'")
-        response = self._amplifier.query(command)
-        logger.debug(f"Response: '{response}'")
 
-        return response
-    
-    
     def _write(self, command):
         """
         Send a write command to the SR830.
+        Thread-safe: acquires the instrument lock before writing.
         """
-        self._check_connection()
-
-        logger.debug(f"Write: '{command}'")
-        self._amplifier.write(command)
+        with self._lock:
+            self._check_connection()
+            logger.debug(f"Write: '{command}'")
+            self._amplifier.write(command)
     
     
     # ----------------------------
@@ -215,9 +237,11 @@ class SR830:
         Set the lock-in to detect at the ith harmonic of the reference frequency
         i ranges from 1 to 19999
         i is limited by ixf ≤ 102 kHz
-        If the value of i requires a detection frequency greater than 102 kHz, then the 
+        If the value of i requires a detection frequency greater than 102 kHz, then the
         harmonic number will be set to the largest value of i such that ixf ≤ 102 kHz
         """
+        if not 1 <= i <= 19999:
+            raise ValueError(f"Detection harmonic {i} out of range (1–19999).")
         self._write(f"HARM {i}")
     
     
@@ -232,8 +256,8 @@ class SR830:
         Limited to 0.004 ≤ x ≤ 5.000
         x will be rounded to 0.002V
         """
-        if not 0 <= x <= 5:
-            raise ValueError(f"Sine amplitude {x} out of range (0 - 5 V).")
+        if not 0.004 <= x <= 5.000:
+            raise ValueError(f"Sine amplitude {x} out of range (0.004 – 5.000 Vrms).")
         
         self._write(f"SLVL {x}")
         
@@ -402,20 +426,111 @@ class SR830:
     # ---------------------------
     # DISPLAY and OUTPUT COMMANDS
     # ---------------------------
+    def display_config(self, i):
+        """Get display channel i (1 or 2) config — returns (param_index, ratio_index)"""
+        if i not in [1, 2]:
+            raise ValueError(f"Display channel {i} must be 1 or 2.")
+        resp = self._query(f"DDEF? {i}")
+        j, k = resp.split(",")
+        return int(j), int(k)
+
+    def set_display_config(self, i, j, k=0):
+        """
+        Set display channel i (1 or 2) to parameter j with ratio k.
+        j: 0=X, 1=Y, 2=R, 3=θ, 4=Noise, 5-8=AuxIn1-4, 9-10=AuxOut1-2, 11=Phase, 12=Mark
+        k: 0=None, 1-4=AuxIn1-4 (ratio denominator)
+        """
+        if i not in [1, 2]:
+            raise ValueError(f"Display channel {i} must be 1 or 2.")
+        if j not in self.DISPLAY_PARAM:
+            raise ValueError(f"Display parameter {j} out of range (0–12).")
+        if k not in self.DISPLAY_RATIO:
+            raise ValueError(f"Display ratio {k} out of range (0–4).")
+        self._write(f"DDEF {i}, {j}, {k}")
+        logger.info(f"Display {i} set to {self.DISPLAY_PARAM[j]}, ratio: {self.DISPLAY_RATIO[k]}")
+
+    def display_value(self, i):
+        """Read the current value shown on display channel i (1 or 2)"""
+        if i not in [1, 2]:
+            raise ValueError(f"Display channel {i} must be 1 or 2.")
+        return float(self._query(f"OUTR? {i}"))
+
+    def front_panel_output(self, i):
+        """Get front panel output source for channel i (1=CH1, 2=CH2)"""
+        if i not in [1, 2]:
+            raise ValueError(f"Output channel {i} must be 1 or 2.")
+        return int(self._query(f"FPOP? {i}"))
+
+    def set_front_panel_output(self, i, j):
+        """
+        Set front panel output source for channel i (1 or 2).
+        CH1 (i=1): j=0 → tracks CH1 display, j=1 → X
+        CH2 (i=2): j=0 → tracks CH2 display, j=1 → Y
+        """
+        if i not in [1, 2]:
+            raise ValueError(f"Output channel {i} must be 1 or 2.")
+        if j not in [0, 1]:
+            raise ValueError(f"Output source {j} must be 0 or 1.")
+        self._write(f"FPOP {i}, {j}")
+        src = "Display" if j == 0 else ("X" if i == 1 else "Y")
+        logger.info(f"Front panel output CH{i} set to {src}")
+    def get_display_mode(self, channel):
+        """
+        Get the output offset and expand (display mode) for a channel.
+        channel: 1 or 2 (CH1 / CH2)
+        Returns (offset_percent, expand_index)
+            offset_percent: current output offset as a percentage (−105.00 to +105.00)
+            expand_index:   0 = ×1,  1 = ×10,  2 = ×100  (see EXPAND dict)
+        Uses VISA command: OEXP? {channel}
+        """
+        if channel not in [1, 2]:
+            raise ValueError(f"Channel {channel} must be 1 or 2.")
+        resp = self._query(f"OEXP? {channel}")
+        x, j = resp.split(",")
+        return float(x), int(j)
+
+    def set_display_mode(self, channel, offset_pct=0.0, expand=0):
+        """
+        Set the output offset and expand (display mode) for a channel.
+        channel:    1 or 2 (CH1 / CH2)
+        offset_pct: output offset in percent (−105.00 to +105.00)
+        expand:     expand index — 0 = ×1,  1 = ×10,  2 = ×100  (see EXPAND dict)
+        Uses VISA command: OEXP {channel}, {offset_pct}, {expand}
+        """
+        if channel not in [1, 2]:
+            raise ValueError(f"Channel {channel} must be 1 or 2.")
+        if not -105.0 <= offset_pct <= 105.0:
+            raise ValueError(f"Offset {offset_pct}% out of range (−105 to +105).")
+        if expand not in self.EXPAND:
+            raise ValueError(f"Expand index {expand} out of range (0=×1, 1=×10, 2=×100).")
+        self._write(f"OEXP {channel}, {offset_pct:.2f}, {expand}")
+        logger.info(f"CH{channel} output: offset={offset_pct:.2f}%, expand={self.EXPAND[expand]}")
+
     
     
-    
+
     # -----------------------------
     # AUX INPUT and OUTPUT COMMANDS
     # -----------------------------
-    def aux_input(self):
-        # Get the aux input voltages in Volts
-        return float(self._query("OAUX?"))
-    
+    def aux_input(self, i):
+        """
+        Read the voltage on Aux Input channel i (1–4) in Volts.
+        Aux inputs are hardware BNC read-only inputs; they cannot be set by software.
+        Uses VISA command: OAUX? {i}
+        """
+        if i not in [1, 2, 3, 4]:
+            raise ValueError(f"Aux input channel {i} out of range (1–4).")
+        return float(self._query(f"OAUX? {i}"))
 
-    def aux_output(self):
-        # Get the aux output voltage in Volts
-        return float(self._query("AUXV?"))
+
+    def aux_output(self, i):
+        """
+        Read the voltage on Aux Output channel i (1–4) in Volts.
+        Uses VISA command: AUXV? {i}
+        """
+        if i not in [1, 2, 3, 4]:
+            raise ValueError(f"Aux output channel {i} out of range (1–4).")
+        return float(self._query(f"AUXV? {i}"))
 
     def set_aux_output(self, i, x):
         """
@@ -432,31 +547,127 @@ class SR830:
 
         self._write(f"AUXV {i} {x}")
     
-    
-    # --------------
-    # SETUP COMMANDS
-    # --------------
-    
-    
+
     
     # --------------
     # AUTO FUNCTIONS
     # --------------
-    
- 
+    def auto_gain(self):
+        """Execute auto gain — SR830 automatically adjusts sensitivity"""
+        self._write("AGAN")
+        sens = self.sensitivity()
+        logger.info(f"Auto Gain complete — Sensitivity: {self.SENSITIVITY[sens][0]} (index {sens})")
 
-    # ---------------------
-    # DATA STORAGE COMMANDS
-    # ---------------------
+    def auto_reserve(self):
+        """Execute auto reserve — SR830 automatically adjusts reserve mode"""
+        self._write("ARSV")
+        res = self.reserve_mode()
+        logger.info(f"Auto Reserve complete — Reserve: {self.RESERVE_MODE[res]}")
+
+    def auto_phase(self):
+        """Execute auto phase — SR830 automatically adjusts reference phase"""
+        self._write("APHS")
+        ph = self.phase()
+        logger.info(f"Auto Phase complete — Phase: {ph:.2f}°")
     
-    
-    
+
     # ----------------------
     # DATA TRANSFER COMMANDS
     # ----------------------
-    
-    
-    
+    def read_parameters(self):
+        """
+        Read the X, Y, R, and Theta parameters via a single SNAP query.
+        Returns (X, Y, R, theta) as floats.
+        """
+        values = self._query("SNAP? 1,2,3,4")
+        parts = values.split(",")
+        X     = float(parts[0])
+        Y     = float(parts[1])
+        R     = float(parts[2])
+        theta = float(parts[3])
+        logger.debug(f"SNAP read — X={X:.6f} Y={Y:.6f} R={R:.6f} θ={theta:.4f}")
+        return X, Y, R, theta
+
+
+    def read_all_params(self):
+        """
+        Read every instrument parameter in a single call and return them as a dict.
+
+        Keys returned (where available):
+            Measurements : X, Y, R, theta
+            Reference    : frequency, phase, sine_amp, harmonic, ref_src, ref_trig
+            Gain/TC      : sensitivity, reserve, time_constant, filter_slope, sync_filter
+            Input        : input_cfg, input_gnd, input_cpl, notch
+            Aux Inputs   : aux_in_1 … aux_in_4
+
+        Any parameter that fails to read is omitted from the dict and a WARNING is logged.
+        Using this method instead of individual reads reduces VISA round-trips and avoids
+        concurrent access issues when the display-interval callback is running.
+        """
+        result = {}
+
+        # ── Measurements (single SNAP query) ──────────────────────────────────
+        try:
+            values = self._query("SNAP? 1,2,3,4")
+            p = values.split(",")
+            result["X"]     = float(p[0])
+            result["Y"]     = float(p[1])
+            result["R"]     = float(p[2])
+            result["theta"] = float(p[3])
+        except Exception as e:
+            logger.warning(f"read_all_params: SNAP? 1,2,3,4 failed: {e}")
+
+        # ── Reference & Phase ─────────────────────────────────────────────────
+        for key, cmd, cast in [
+            ("frequency", "FREQ?", float),
+            ("phase",     "PHAS?", float),
+            ("sine_amp",  "SLVL?", float),
+            ("harmonic",  "HARM?", int),
+            ("ref_src",   "FMOD?", int),
+            ("ref_trig",  "RSLP?", int),
+        ]:
+            try:
+                result[key] = cast(self._query(cmd))
+            except Exception as e:
+                logger.warning(f"read_all_params: {cmd} failed: {e}")
+
+        # ── Gain & Time Constant ──────────────────────────────────────────────
+        for key, cmd, cast in [
+            ("sensitivity",   "SENS?", int),
+            ("reserve",       "RMOD?", int),
+            ("time_constant", "OFLT?", int),
+            ("filter_slope",  "OFSL?", int),
+            ("sync_filter",   "SYNC?", int),
+        ]:
+            try:
+                result[key] = cast(self._query(cmd))
+            except Exception as e:
+                logger.warning(f"read_all_params: {cmd} failed: {e}")
+
+        # ── Input & Filter ────────────────────────────────────────────────────
+        for key, cmd, cast in [
+            ("input_cfg", "ISRC?", int),
+            ("input_gnd", "IGND?", int),
+            ("input_cpl", "ICPL?", int),
+            ("notch",     "ILIN?", int),
+        ]:
+            try:
+                result[key] = cast(self._query(cmd))
+            except Exception as e:
+                logger.warning(f"read_all_params: {cmd} failed: {e}")
+
+        # ── Aux Inputs ────────────────────────────────────────────────────────
+        for ch in range(1, 5):
+            try:
+                result[f"aux_in_{ch}"] = float(self._query(f"OAUX? {ch}"))
+            except Exception as e:
+                logger.warning(f"read_all_params: OAUX? {ch} failed: {e}")
+
+        logger.debug(f"read_all_params: {len(result)} parameters read successfully")
+        return result
+
+
+
     # -------------------------
     # STATUS REPORTING COMMANDS
     # -------------------------

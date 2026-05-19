@@ -237,7 +237,7 @@ def simulation(amp):
 
                 time.sleep(PAUSE)
         
-
+        # Sine Amplitude
         elif nav == 6:
             opt = function_options("Sine Amplitude")
  
@@ -271,33 +271,271 @@ def simulation(amp):
                     logger.error(f"Failed to set sine amplitude: {e}")
                 time.sleep(PAUSE)
  
-
+        # Input Configuration
         elif nav == 7:
             opt = function_options("Input Configuration")
 
+            if opt == 0:
+                pass
+
+            elif opt == 1:
+                i = amp.input_configuration()
+                labels = {0: "A", 1: "A-B", 2: "I (1 MΩ)", 3: "I (100 MΩ)"}
+                print(f"\n  Input configuration: {i} ({labels.get(i, '?')})")
+                time.sleep(PAUSE)
+
+            elif opt == 2:
+                print("  0 = A\n  1 = A-B\n  2 = I (1 MΩ)\n  3 = I (100 MΩ)")
+                try:
+                    i = int(input("  Enter input configuration (0-3): "))
+                except ValueError:
+                    print("  Invalid input — must be 0, 1, 2, or 3.")
+                    display_menu()
+                    continue
+                try:
+                    amp.set_input_configuration(i)
+                    labels = {0: "A", 1: "A-B", 2: "I (1 MΩ)", 3: "I (100 MΩ)"}
+                    print(f"  Input configuration set to: {i} ({labels[i]})")
+                except ValueError as e:
+                    print(f"  Error: {e}")
+                time.sleep(PAUSE)
+
+        # Input Shield Grounding
         elif nav == 8:
             opt = function_options("Input Shield Grounding")
-        
+
+            if opt == 0:
+                pass
+
+            elif opt == 1:
+                i = amp.input_shield_grounding()
+                labels = {0: "Float", 1: "Ground"}
+                print(f"\n  Input shield grounding: {i} ({labels.get(i, '?')})")
+                time.sleep(PAUSE)
+
+            elif opt == 2:
+                print("  0 = Float\n  1 = Ground")
+                try:
+                    i = int(input("  Enter shield grounding (0 or 1): "))
+                except ValueError:
+                    print("  Invalid input — must be 0 or 1.")
+                    display_menu()
+                    continue
+                try:
+                    amp.set_input_shield_grounding(i)
+                    labels = {0: "Float", 1: "Ground"}
+                    print(f"  Shield grounding set to: {i} ({labels[i]})")
+                except ValueError as e:
+                    print(f"  Error: {e}")
+                time.sleep(PAUSE)
+
+        # Input Coupling
         elif nav == 9:
             opt = function_options("Input Coupling")
-        
+
+            if opt == 0:
+                pass
+
+            elif opt == 1:
+                i = amp.input_coupling()
+                labels = {0: "AC", 1: "DC"}
+                print(f"\n  Input coupling: {i} ({labels.get(i, '?')})")
+                time.sleep(PAUSE)
+
+            elif opt == 2:
+                print("  0 = AC\n  1 = DC")
+                try:
+                    i = int(input("  Enter input coupling (0 or 1): "))
+                except ValueError:
+                    print("  Invalid input — must be 0 or 1.")
+                    display_menu()
+                    continue
+                try:
+                    amp.set_input_coupling(i)
+                    labels = {0: "AC", 1: "DC"}
+                    print(f"  Input coupling set to: {i} ({labels[i]})")
+                except ValueError as e:
+                    print(f"  Error: {e}")
+                time.sleep(PAUSE)
+
+        # Input Line Notch Filter Status
         elif nav == 10:
             opt = function_options("Input Line Notch Filter")
 
+            if opt == 0:
+                pass
+
+            elif opt == 1:
+                i = amp.input_line_notch_filter()
+                labels = {0: "No filters", 1: "Line notch", 2: "2× Line notch", 3: "Both filters"}
+                print(f"\n  Input line notch filter: {i} ({labels.get(i, '?')})")
+                time.sleep(PAUSE)
+
+            elif opt == 2:
+                print("  0 = No filters\n  1 = Line notch\n  2 = 2× Line notch\n  3 = Both filters")
+                try:
+                    i = int(input("  Enter notch filter setting (0-3): "))
+                except ValueError:
+                    print("  Invalid input — must be 0, 1, 2, or 3.")
+                    display_menu()
+                    continue
+                try:
+                    amp.set_input_line_notch_filter(i)
+                    labels = {0: "No filters", 1: "Line notch", 2: "2× Line notch", 3: "Both filters"}
+                    print(f"  Notch filter set to: {i} ({labels[i]})")
+                except ValueError as e:
+                    print(f"  Error: {e}")
+                time.sleep(PAUSE)
+
+        # Sensitivity
         elif nav == 11:
             opt = function_options("Sensitivity")
-        
+
+            if opt == 0:
+                pass
+
+            elif opt == 1:
+                i = amp.sensitivity()
+                from amplifier.sr830 import SR830
+                label = SR830.SENSITIVITY.get(i, ['?'])[0]
+                print(f"\n  Sensitivity: {i} ({label})")
+                time.sleep(PAUSE)
+
+            elif opt == 2:
+                from amplifier.sr830 import SR830
+                print("  Sensitivity index → value:")
+                for k, v in SR830.SENSITIVITY.items():
+                    print(f"    {k:2d} = {v[0]}")
+                try:
+                    i = int(input("  Enter sensitivity index (0-26): "))
+                except ValueError:
+                    print("  Invalid input — must be a whole number.")
+                    display_menu()
+                    continue
+                try:
+                    amp.set_sensitivity(i)
+                    print(f"  Sensitivity set to: {i} ({SR830.SENSITIVITY[i][0]})")
+                except ValueError as e:
+                    print(f"  Error: {e}")
+                time.sleep(PAUSE)
+
+        # Reserve Mode
         elif nav == 12:
             opt = function_options("Reserve Mode")
-        
+
+            if opt == 0:
+                pass
+
+            elif opt == 1:
+                i = amp.reserve_mode()
+                labels = {0: "High Reserve", 1: "Normal", 2: "Low Noise"}
+                print(f"\n  Reserve mode: {i} ({labels.get(i, '?')})")
+                time.sleep(PAUSE)
+
+            elif opt == 2:
+                print("  0 = High Reserve\n  1 = Normal\n  2 = Low Noise")
+                try:
+                    i = int(input("  Enter reserve mode (0, 1, or 2): "))
+                except ValueError:
+                    print("  Invalid input — must be 0, 1, or 2.")
+                    display_menu()
+                    continue
+                try:
+                    amp.set_reserve_mode(i)
+                    labels = {0: "High Reserve", 1: "Normal", 2: "Low Noise"}
+                    print(f"  Reserve mode set to: {i} ({labels[i]})")
+                except ValueError as e:
+                    print(f"  Error: {e}")
+                time.sleep(PAUSE)
+
+        # Time Constant
         elif nav == 13:
             opt = function_options("Time Constant")
-        
+
+            if opt == 0:
+                pass
+
+            elif opt == 1:
+                i = amp.time_constant()
+                from amplifier.sr830 import SR830
+                label = SR830.TIME_CONSTANT.get(i, ['?'])[0]
+                print(f"\n  Time constant: {i} ({label})")
+                time.sleep(PAUSE)
+
+            elif opt == 2:
+                from amplifier.sr830 import SR830
+                print("  Time constant index → value:")
+                for k, v in SR830.TIME_CONSTANT.items():
+                    print(f"    {k:2d} = {v[0]}")
+                try:
+                    i = int(input("  Enter time constant index (0-19): "))
+                except ValueError:
+                    print("  Invalid input — must be a whole number.")
+                    display_menu()
+                    continue
+                try:
+                    amp.set_time_constant(i)
+                    print(f"  Time constant set to: {i} ({SR830.TIME_CONSTANT[i][0]})")
+                except ValueError as e:
+                    print(f"  Error: {e}")
+                time.sleep(PAUSE)
+
+        # Low Pass Filter Slope
         elif nav == 14:
             opt = function_options("Low Pass Filter Slope")
-        
+
+            if opt == 0:
+                pass
+
+            elif opt == 1:
+                i = amp.low_pass_filter_slope()
+                labels = {0: "6 dB/oct", 1: "12 dB/oct", 2: "18 dB/oct", 3: "24 dB/oct"}
+                print(f"\n  Low pass filter slope: {i} ({labels.get(i, '?')})")
+                time.sleep(PAUSE)
+
+            elif opt == 2:
+                print("  0 = 6 dB/oct\n  1 = 12 dB/oct\n  2 = 18 dB/oct\n  3 = 24 dB/oct")
+                try:
+                    i = int(input("  Enter filter slope (0-3): "))
+                except ValueError:
+                    print("  Invalid input — must be 0, 1, 2, or 3.")
+                    display_menu()
+                    continue
+                try:
+                    amp.set_low_pass_filter_slope(i)
+                    labels = {0: "6 dB/oct", 1: "12 dB/oct", 2: "18 dB/oct", 3: "24 dB/oct"}
+                    print(f"  Filter slope set to: {i} ({labels[i]})")
+                except ValueError as e:
+                    print(f"  Error: {e}")
+                time.sleep(PAUSE)
+
+        # Synchronous Filter
         elif nav == 15:
             opt = function_options("Synchronous Filter")
 
-        
+            if opt == 0:
+                pass
+
+            elif opt == 1:
+                i = amp.synchronous_filter()
+                labels = {0: "Off", 1: "On (< 200 Hz)"}
+                print(f"\n  Synchronous filter: {i} ({labels.get(i, '?')})")
+                time.sleep(PAUSE)
+
+            elif opt == 2:
+                print("  0 = Off\n  1 = On (synchronous filtering below 200 Hz)")
+                try:
+                    i = int(input("  Enter synchronous filter (0 or 1): "))
+                except ValueError:
+                    print("  Invalid input — must be 0 or 1.")
+                    display_menu()
+                    continue
+                try:
+                    amp.set_synchronous_filter(i)
+                    labels = {0: "Off", 1: "On (< 200 Hz)"}
+                    print(f"  Synchronous filter set to: {i} ({labels[i]})")
+                except ValueError as e:
+                    print(f"  Error: {e}")
+                time.sleep(PAUSE)
+
         display_menu()
