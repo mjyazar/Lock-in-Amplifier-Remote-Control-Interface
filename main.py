@@ -32,13 +32,13 @@ def setup_logging():
         datefmt="%Y-%m-%d %H:%M:%S",
     )
 
-    # --- Console handler: INFO and above (clean, not cluttered with DEBUG) ---
+    # Console handler: INFO and above (clean, not cluttered with DEBUG)
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setLevel(logging.INFO)
     console_handler.setFormatter(log_format)
     root_logger.addHandler(console_handler)
  
-    # --- File handler: DEBUG and above (full trace for troubleshooting) ---
+    # File handler: DEBUG and above (full trace for troubleshooting)
     # The file is appended to on each run, not overwritten.
     # Change mode="a" to mode="w" if you want a fresh file each run.
     # Filename uses hyphens (not colons) so it is valid on Windows/NTFS.

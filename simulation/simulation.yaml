@@ -5,48 +5,14 @@ devices:
       GPIB INSTR:
         q: "\n"
         r: "\n"
+
     dialogues:
-      # Identification
+      # ── Identification ────────────────────────────────────────────────────────
       - q: "*IDN?"
         r: "Stanford_Research_Systems,SR830,s/n00001,ver1.07"
 
-      # Reference and Phase
-      - q: "PHAS?"
-        r: "0.00"
-      - q: "FMOD?"
-        r: "1"
-      - q: "FREQ?"
-        r: "1000.0000"
-      - q: "RSLP?"
-        r: "0"
-      - q: "HARM?"
-        r: "1"
-      - q: "SLVL?"
-        r: "0.0040"
-
-      # Input and Filter
-      - q: "ISRC?"
-        r: "0"
-      - q: "IGND?"
-        r: "0"
-      - q: "ICPL?"
-        r: "0"
-      - q: "ILIN?"
-        r: "0"
-
-      # Gain and Time Constant
-      - q: "SENS?"
-        r: "10"
-      - q: "RMOD?"
-        r: "1"
-      - q: "OFLT?"
-        r: "8"
-      - q: "OFSL?"
-        r: "1"
-      - q: "SYNC?"
-        r: "0"
-
-      # Individual output readings
+      # ── Measurement outputs (physical signals — not settable via GPIB) ────────
+      # OUTP? i  reads raw output channel i: 1=X, 2=Y, 3=R, 4=θ
       - q: "OUTP? 1"
         r: "0.001234"
       - q: "OUTP? 2"
@@ -56,27 +22,17 @@ devices:
       - q: "OUTP? 4"
         r: "12.3456"
 
-      # SNAP
+      # SNAP? reads multiple outputs simultaneously
       - q: "SNAP? 1,2,3,4"
         r: "0.001234,0.000567,0.001357,12.3456"
 
-      # Display config (DDEF) and display values (OUTR)
-      - q: "DDEF? 1"
-        r: "0,0"
-      - q: "DDEF? 2"
-        r: "1,0"
+      # OUTR? i  reads the value shown on display channel i (with offset/expand)
       - q: "OUTR? 1"
         r: "0.001234"
       - q: "OUTR? 2"
         r: "0.000567"
 
-      # Front panel output (FPOP)
-      - q: "FPOP? 1"
-        r: "0"
-      - q: "FPOP? 2"
-        r: "0"
-
-      # Aux inputs and outputs
+      # ── Aux inputs (hardware BNC read-only inputs) ─────────────────────────────
       - q: "OAUX? 1"
         r: "0.0000"
       - q: "OAUX? 2"
@@ -85,14 +41,199 @@ devices:
         r: "0.0000"
       - q: "OAUX? 4"
         r: "0.0000"
-      - q: "AUXV? 1"
-        r: "0.0000"
-      - q: "AUXV? 2"
-        r: "0.0000"
-      - q: "AUXV? 3"
-        r: "0.0000"
-      - q: "AUXV? 4"
-        r: "0.0000"
+
+    properties:
+      # ── Reference & Phase ──────────────────────────────────────────────────────
+      phase:
+        default: "0.00"
+        getter:
+          q: "PHAS?"
+          r: "{}"
+        setter:
+          q: "PHAS {}"
+
+      ref_src:
+        default: "1"
+        getter:
+          q: "FMOD?"
+          r: "{}"
+        setter:
+          q: "FMOD {}"
+
+      frequency:
+        default: "1000.0000"
+        getter:
+          q: "FREQ?"
+          r: "{}"
+        setter:
+          q: "FREQ {}"
+
+      ref_trig:
+        default: "0"
+        getter:
+          q: "RSLP?"
+          r: "{}"
+        setter:
+          q: "RSLP {}"
+
+      harmonic:
+        default: "1"
+        getter:
+          q: "HARM?"
+          r: "{}"
+        setter:
+          q: "HARM {}"
+
+      sine_amp:
+        default: "0.0040"
+        getter:
+          q: "SLVL?"
+          r: "{}"
+        setter:
+          q: "SLVL {}"
+
+      # ── Input & Filter ─────────────────────────────────────────────────────────
+      input_cfg:
+        default: "0"
+        getter:
+          q: "ISRC?"
+          r: "{}"
+        setter:
+          q: "ISRC {}"
+
+      input_gnd:
+        default: "0"
+        getter:
+          q: "IGND?"
+          r: "{}"
+        setter:
+          q: "IGND {}"
+
+      input_cpl:
+        default: "0"
+        getter:
+          q: "ICPL?"
+          r: "{}"
+        setter:
+          q: "ICPL {}"
+
+      notch:
+        default: "0"
+        getter:
+          q: "ILIN?"
+          r: "{}"
+        setter:
+          q: "ILIN {}"
+
+      # ── Gain & Time Constant ───────────────────────────────────────────────────
+      sensitivity:
+        default: "10"
+        getter:
+          q: "SENS?"
+          r: "{}"
+        setter:
+          q: "SENS {}"
+
+      reserve:
+        default: "1"
+        getter:
+          q: "RMOD?"
+          r: "{}"
+        setter:
+          q: "RMOD {}"
+
+      time_constant:
+        default: "8"
+        getter:
+          q: "OFLT?"
+          r: "{}"
+        setter:
+          q: "OFLT {}"
+
+      filter_slope:
+        default: "1"
+        getter:
+          q: "OFSL?"
+          r: "{}"
+        setter:
+          q: "OFSL {}"
+
+      sync_filter:
+        default: "0"
+        getter:
+          q: "SYNC?"
+          r: "{}"
+        setter:
+          q: "SYNC {}"
+
+      # ── Display config (DDEF i, j, k — compound, per channel) ─────────────────
+      # Getter returns "j,k"; setter captures everything after "DDEF i, " as "j, k".
+      # The driver splits on "," which works with or without the trailing space.
+      ddef1:
+        default: "0,0"
+        getter:
+          q: "DDEF? 1"
+          r: "{}"
+        setter:
+          q: "DDEF 1, {}"
+
+      ddef2:
+        default: "0,0"
+        getter:
+          q: "DDEF? 2"
+          r: "{}"
+        setter:
+          q: "DDEF 2, {}"
+
+      # ── Front panel output (FPOP i, j — per channel) ──────────────────────────
+      fpop1:
+        default: "0"
+        getter:
+          q: "FPOP? 1"
+          r: "{}"
+        setter:
+          q: "FPOP 1, {}"
+
+      fpop2:
+        default: "0"
+        getter:
+          q: "FPOP? 2"
+          r: "{}"
+        setter:
+          q: "FPOP 2, {}"
+
+      # ── Aux outputs (AUXV i, x — per channel) ─────────────────────────────────
+      auxv1:
+        default: "0.0000"
+        getter:
+          q: "AUXV? 1"
+          r: "{}"
+        setter:
+          q: "AUXV 1, {}"
+
+      auxv2:
+        default: "0.0000"
+        getter:
+          q: "AUXV? 2"
+          r: "{}"
+        setter:
+          q: "AUXV 2, {}"
+
+      auxv3:
+        default: "0.0000"
+        getter:
+          q: "AUXV? 3"
+          r: "{}"
+        setter:
+          q: "AUXV 3, {}"
+
+      auxv4:
+        default: "0.0000"
+        getter:
+          q: "AUXV? 4"
+          r: "{}"
+        setter:
+          q: "AUXV 4, {}"
 
 resources:
   "GPIB::1::INSTR":

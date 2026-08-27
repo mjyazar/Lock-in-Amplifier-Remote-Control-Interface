@@ -44,10 +44,14 @@ class SR830:
                           1: "Normal",
                           2: "Low Noise"}
 
-    DISPLAY_PARAM: dict = {
-        0: "X", 1: "Y", 2: "R", 3: "θ", 4: "Noise",
-        5: "Aux In 1", 6: "Aux In 2", 7: "Aux In 3", 8: "Aux In 4",
-        9: "Aux Out 1", 10: "Aux Out 2", 11: "Phase", 12: "Mark",
+    # CH1 and CH2 display parameters (j argument in DDEF i, j, k).
+    # j means different things for each channel — they are NOT a shared index space.
+    # SR830 manual §5 / DDEF command description.
+    CH1_DISPLAY_PARAM: dict = {
+        0: "X", 1: "R", 2: "X Noise", 3: "Aux In 1", 4: "Aux In 2",
+    }
+    CH2_DISPLAY_PARAM: dict = {
+        0: "Y", 1: "θ", 2: "Y Noise", 3: "Aux In 3", 4: "Aux In 4",
     }
     DISPLAY_RATIO: dict = {
         0: "None", 1: "Aux In 1", 2: "Aux In 2", 3: "Aux In 3", 4: "Aux In 4",
@@ -200,12 +204,21 @@ class SR830:
         Sets the frequency of the internal oscillator
         The value of f will be rounded to 5 digits or 0.0001 Hz, whichever is greater
         Limited to 0.001 ≤ f ≤ 102000.
-        If the harmonic number is greater than 1, then the frequency is 
+        If the harmonic number is greater than 1, then the frequency is
         limited to nxf ≤ 102 kHz where n is the harmonic number
+        Raises SR830Error if the reference source is External (FMOD=0), because the
+        internal oscillator frequency is ignored in that mode.
         """
         if not 0.001 <= frequency <= 102_000:
             raise ValueError(f"Frequency {frequency} Hz out of range (0.001 - 102,000 Hz).")
-        
+
+        if self.reference_source() == 0:
+            raise SR830Error(
+                "Cannot set frequency: reference source is External (FMOD=0). "
+                "The internal oscillator is inactive and tracks the external signal. "
+                "Switch to Internal reference first."
+            )
+
         self._write(f"FREQ {frequency:.4f}")
         logger.info(f"Frequency set to {frequency:.4f} Hz")
 
@@ -236,12 +249,20 @@ class SR830:
         """
         Set the lock-in to detect at the ith harmonic of the reference frequency
         i ranges from 1 to 19999
-        i is limited by ixf ≤ 102 kHz
-        If the value of i requires a detection frequency greater than 102 kHz, then the
-        harmonic number will be set to the largest value of i such that ixf ≤ 102 kHz
+        i is limited by ixf ≤ 102 kHz; raises ValueError if the constraint is violated
+        rather than silently clipping (which the hardware would otherwise do).
         """
         if not 1 <= i <= 19999:
             raise ValueError(f"Detection harmonic {i} out of range (1–19999).")
+
+        freq = self.frequency()
+        if freq > 0 and i * freq > 102_000:
+            max_i = int(102_000 / freq)
+            raise ValueError(
+                f"Harmonic {i} × {freq:.4f} Hz = {i * freq:.0f} Hz exceeds the 102 kHz limit. "
+                f"Maximum harmonic at {freq:.4f} Hz is {max_i}."
+            )
+
         self._write(f"HARM {i}")
     
     
@@ -254,13 +275,15 @@ class SR830:
         Set the amplitude of the sine output
         x is voltage in Volts
         Limited to 0.004 ≤ x ≤ 5.000
-        x will be rounded to 0.002V
+        x will be rounded to 0.002V (SR830 hardware resolution); pre-rounding here ensures
+        the set value matches the readback.
         """
         if not 0.004 <= x <= 5.000:
             raise ValueError(f"Sine amplitude {x} out of range (0.004 – 5.000 Vrms).")
-        
-        self._write(f"SLVL {x}")
-        
+
+        x = round(round(x / 0.002) * 0.002, 4)
+        self._write(f"SLVL {x:.4f}")
+
     
     # -------------------------
     # INPUT and FILTER COMMANDS
@@ -437,17 +460,19 @@ class SR830:
     def set_display_config(self, i, j, k=0):
         """
         Set display channel i (1 or 2) to parameter j with ratio k.
-        j: 0=X, 1=Y, 2=R, 3=θ, 4=Noise, 5-8=AuxIn1-4, 9-10=AuxOut1-2, 11=Phase, 12=Mark
-        k: 0=None, 1-4=AuxIn1-4 (ratio denominator)
+        CH1 (i=1): j=0=X, 1=R, 2=X Noise, 3=Aux In 1, 4=Aux In 2
+        CH2 (i=2): j=0=Y, 1=θ, 2=Y Noise, 3=Aux In 3, 4=Aux In 4
+        k: 0=None, 1-4=Aux In 1-4 (ratio denominator)
         """
         if i not in [1, 2]:
             raise ValueError(f"Display channel {i} must be 1 or 2.")
-        if j not in self.DISPLAY_PARAM:
-            raise ValueError(f"Display parameter {j} out of range (0–12).")
+        param_map = self.CH1_DISPLAY_PARAM if i == 1 else self.CH2_DISPLAY_PARAM
+        if j not in param_map:
+            raise ValueError(f"Display parameter {j} out of range (0–4) for CH{i}.")
         if k not in self.DISPLAY_RATIO:
             raise ValueError(f"Display ratio {k} out of range (0–4).")
         self._write(f"DDEF {i}, {j}, {k}")
-        logger.info(f"Display {i} set to {self.DISPLAY_PARAM[j]}, ratio: {self.DISPLAY_RATIO[k]}")
+        logger.info(f"Display CH{i} set to {param_map[j]}, ratio: {self.DISPLAY_RATIO[k]}")
 
     def display_value(self, i):
         """Read the current value shown on display channel i (1 or 2)"""
@@ -545,7 +570,7 @@ class SR830:
         if not -10.5 <= x <= 10.5:
             raise ValueError(f"Aux output voltage {x} out of range (-10.5 - 10.5 V).")
 
-        self._write(f"AUXV {i} {x}")
+        self._write(f"AUXV {i}, {x:.3f}")
     
 
     

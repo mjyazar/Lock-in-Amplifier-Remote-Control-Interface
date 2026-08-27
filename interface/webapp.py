@@ -172,14 +172,16 @@ def create_app(amp):
     ]
     SYNC_OPTS = [{"label": "Off", "value": 0}, {"label": "On (<200 Hz)", "value": 1}]
 
-    DDEF_PARAM_OPTS = [
-        {"label": "X",         "value": 0},  {"label": "Y",         "value": 1},
-        {"label": "R",         "value": 2},  {"label": "θ",    "value": 3},
-        {"label": "Noise",     "value": 4},  {"label": "Aux In 1",  "value": 5},
-        {"label": "Aux In 2",  "value": 6},  {"label": "Aux In 3",  "value": 7},
-        {"label": "Aux In 4",  "value": 8},  {"label": "Aux Out 1", "value": 9},
-        {"label": "Aux Out 2", "value": 10}, {"label": "Phase",     "value": 11},
-        {"label": "Mark",      "value": 12},
+    # CH1 and CH2 have different display parameter sets — see SR830 manual / DDEF command.
+    DDEF_CH1_PARAM_OPTS = [
+        {"label": "X",        "value": 0}, {"label": "R",        "value": 1},
+        {"label": "X Noise",  "value": 2}, {"label": "Aux In 1", "value": 3},
+        {"label": "Aux In 2", "value": 4},
+    ]
+    DDEF_CH2_PARAM_OPTS = [
+        {"label": "Y",        "value": 0}, {"label": "θ",        "value": 1},
+        {"label": "Y Noise",  "value": 2}, {"label": "Aux In 3", "value": 3},
+        {"label": "Aux In 4", "value": 4},
     ]
     DDEF_RATIO_OPTS = [
         {"label": "None",     "value": 0}, {"label": "Aux In 1", "value": 1},
@@ -324,7 +326,7 @@ def create_app(amp):
                     placeholder="0.001 – 102000.000", wide=True),
         _number_row("Phase (°)", "out-phase", "btn-read-phase",
                     "in-phase", "btn-set-phase", "status-phase",
-                    placeholder="−360.00 – +729.99", wide=True),
+                    placeholder="±180° effective (wraps outside)", wide=True),
         _number_row("Sine Amplitude (Vrms)", "out-sine-amp", "btn-read-sine-amp",
                     "in-sine-amp", "btn-set-sine-amp", "status-sine-amp",
                     placeholder="0.004 – 5.000", wide=True),
@@ -545,9 +547,9 @@ def create_app(amp):
                 html.Div("Channel 1", style={"fontSize": "0.77em", "fontWeight": "700",
                                              "color": _MUTED, "marginBottom": "8px"}),
                 html.Div([
-                    _dd_labeled("Parameter", id="ddef1-param", options=DDEF_PARAM_OPTS, value=0),
-                    _dd_labeled("Ratio",     id="ddef1-ratio", options=DDEF_RATIO_OPTS, value=0),
-                    _dd_labeled("Output src",id="fpop1-src",   options=FPOP_CH1_OPTS,   value=0),
+                    _dd_labeled("Parameter", id="ddef1-param", options=DDEF_CH1_PARAM_OPTS, value=0),
+                    _dd_labeled("Ratio",     id="ddef1-ratio", options=DDEF_RATIO_OPTS,   value=0),
+                    _dd_labeled("Output src",id="fpop1-src",   options=FPOP_CH1_OPTS,     value=0),
                     html.Div([
                         html.Label(" ", style={"fontSize": "0.74em", "display": "block", "marginBottom": "2px"}),
                         html.Button("Apply", id="btn-set-ddef1", n_clicks=0, style=_BTN_SET),
@@ -566,9 +568,9 @@ def create_app(amp):
                 html.Div("Channel 2", style={"fontSize": "0.77em", "fontWeight": "700",
                                              "color": _MUTED, "marginBottom": "8px"}),
                 html.Div([
-                    _dd_labeled("Parameter", id="ddef2-param", options=DDEF_PARAM_OPTS, value=1),
-                    _dd_labeled("Ratio",     id="ddef2-ratio", options=DDEF_RATIO_OPTS, value=0),
-                    _dd_labeled("Output src",id="fpop2-src",   options=FPOP_CH2_OPTS,   value=0),
+                    _dd_labeled("Parameter", id="ddef2-param", options=DDEF_CH2_PARAM_OPTS, value=0),
+                    _dd_labeled("Ratio",     id="ddef2-ratio", options=DDEF_RATIO_OPTS,   value=0),
+                    _dd_labeled("Output src",id="fpop2-src",   options=FPOP_CH2_OPTS,     value=0),
                     html.Div([
                         html.Label(" ", style={"fontSize": "0.74em", "display": "block", "marginBottom": "2px"}),
                         html.Button("Apply", id="btn-set-ddef2", n_clicks=0, style=_BTN_SET),
@@ -909,7 +911,10 @@ def create_app(amp):
 
     # ── Auto Functions ────────────────────────────────────────────────────────
     @app.callback(
-        Output("status-auto", "children"),
+        Output("status-auto",      "children"),
+        Output("out-sensitivity",  "children", allow_duplicate=True),
+        Output("out-reserve",      "children", allow_duplicate=True),
+        Output("out-phase",        "children", allow_duplicate=True),
         Input("btn-auto-gain",    "n_clicks"),
         Input("btn-auto-reserve", "n_clicks"),
         Input("btn-auto-phase",   "n_clicks"),
@@ -918,54 +923,104 @@ def create_app(amp):
     def cb_auto(_, __, ___):
         ctx = dash.callback_context
         t = ctx.triggered[0]["prop_id"].split(".")[0]
+        no = dash.no_update
         try:
-            if t == "btn-auto-gain":    amp.auto_gain();    return _ok("✓ Auto Gain")
-            if t == "btn-auto-reserve": amp.auto_reserve(); return _ok("✓ Auto Reserve")
-            if t == "btn-auto-phase":   amp.auto_phase();   return _ok("✓ Auto Phase")
-        except Exception as e: return _err(f"✗ {e}")
-        return ""
+            if t == "btn-auto-gain":
+                amp.auto_gain()
+                try: disp = _sl(amp.sensitivity())
+                except Exception: disp = no
+                return _ok("✓ Auto Gain complete"), disp, no, no
+            if t == "btn-auto-reserve":
+                amp.auto_reserve()
+                try: disp = _rl(amp.reserve_mode())
+                except Exception: disp = no
+                return _ok("✓ Auto Reserve complete"), no, disp, no
+            if t == "btn-auto-phase":
+                amp.auto_phase()
+                try: disp = f"{amp.phase():.2f}°"
+                except Exception: disp = no
+                return _ok("✓ Auto Phase complete"), no, no, disp
+        except Exception as e:
+            return _err(f"✗ {e}"), no, no, no
+        return "", no, no, no
 
     # ── Frequency ─────────────────────────────────────────────────────────────
     @app.callback(Output("out-frequency","children"), Input("btn-read-frequency","n_clicks"),
                   prevent_initial_call=True)
     def cb_rd_freq(_): return f"{amp.frequency():.6f} Hz"
 
-    @app.callback(Output("status-frequency","children"), Output("in-frequency","style"),
-                  Input("btn-set-frequency","n_clicks"), State("in-frequency","value"),
-                  prevent_initial_call=True)
+    @app.callback(
+        Output("out-frequency",    "children", allow_duplicate=True),
+        Output("status-frequency", "children"),
+        Output("in-frequency",     "style"),
+        Input("btn-set-frequency", "n_clicks"),
+        State("in-frequency",      "value"),
+        prevent_initial_call=True,
+    )
     def cb_st_freq(_, v):
-        if v is None: return _warn("⚠ Enter a value first."), _NUM_WIDE
+        if v is None: return dash.no_update, _warn("⚠ Enter a value first."), _NUM_WIDE
         try:
-            amp.set_frequency(float(v)); return _ok(f"✓ {float(v):.4f} Hz"), _NUM_WIDE
-        except ValueError as e: return _err(f"✗ {e}"), _NUM_WIDE_INVALID
+            amp.set_frequency(float(v))
+        except ValueError as e:
+            return dash.no_update, _err(f"✗ {e}"), _NUM_WIDE_INVALID
+        except Exception as e:
+            return dash.no_update, _err(f"✗ {e}"), _NUM_WIDE
+        try: disp = f"{amp.frequency():.6f} Hz"
+        except Exception: disp = f"{float(v):.4f} Hz"
+        return disp, _ok(f"✓ {disp}"), _NUM_WIDE
 
     # ── Phase ─────────────────────────────────────────────────────────────────
     @app.callback(Output("out-phase","children"), Input("btn-read-phase","n_clicks"),
                   prevent_initial_call=True)
     def cb_rd_phase(_): return f"{amp.phase():.2f}°"
 
-    @app.callback(Output("status-phase","children"), Output("in-phase","style"),
-                  Input("btn-set-phase","n_clicks"), State("in-phase","value"),
-                  prevent_initial_call=True)
+    @app.callback(
+        Output("out-phase",    "children", allow_duplicate=True),
+        Output("status-phase", "children"),
+        Output("in-phase",     "style"),
+        Input("btn-set-phase", "n_clicks"),
+        State("in-phase",      "value"),
+        prevent_initial_call=True,
+    )
     def cb_st_phase(_, v):
-        if v is None: return _warn("⚠ Enter a value first."), _NUM_WIDE
+        if v is None: return dash.no_update, _warn("⚠ Enter a value first."), _NUM_WIDE
         try:
-            amp.set_phase(float(v)); return _ok(f"✓ {float(v):.2f}°"), _NUM_WIDE
-        except ValueError as e: return _err(f"✗ {e}"), _NUM_WIDE_INVALID
+            phase_in = float(v)
+            amp.set_phase(phase_in)
+        except ValueError as e:
+            return dash.no_update, _err(f"✗ {e}"), _NUM_WIDE_INVALID
+        except Exception as e:
+            return dash.no_update, _err(f"✗ {e}"), _NUM_WIDE
+        try: disp = f"{amp.phase():.2f}°"
+        except Exception: disp = f"{phase_in:.2f}°"
+        if abs(phase_in) > 180.0:
+            return disp, _warn(f"⚠ Wrapped → {disp}  (SR830 wraps values outside ±180°)"), _NUM_WIDE
+        return disp, _ok(f"✓ {disp}"), _NUM_WIDE
 
     # ── Sine Amplitude ─────────────────────────────────────────────────────────
     @app.callback(Output("out-sine-amp","children"), Input("btn-read-sine-amp","n_clicks"),
                   prevent_initial_call=True)
     def cb_rd_sine(_): return f"{amp.sine_amplitude():.4f} Vrms"
 
-    @app.callback(Output("status-sine-amp","children"), Output("in-sine-amp","style"),
-                  Input("btn-set-sine-amp","n_clicks"), State("in-sine-amp","value"),
-                  prevent_initial_call=True)
+    @app.callback(
+        Output("out-sine-amp",    "children", allow_duplicate=True),
+        Output("status-sine-amp", "children"),
+        Output("in-sine-amp",     "style"),
+        Input("btn-set-sine-amp", "n_clicks"),
+        State("in-sine-amp",      "value"),
+        prevent_initial_call=True,
+    )
     def cb_st_sine(_, v):
-        if v is None: return _warn("⚠ Enter a value first."), _NUM_WIDE
+        if v is None: return dash.no_update, _warn("⚠ Enter a value first."), _NUM_WIDE
         try:
-            amp.set_sine_amplitude(float(v)); return _ok(f"✓ {float(v):.4f} Vrms"), _NUM_WIDE
-        except ValueError as e: return _err(f"✗ {e}"), _NUM_WIDE_INVALID
+            amp.set_sine_amplitude(float(v))
+        except ValueError as e:
+            return dash.no_update, _err(f"✗ {e}"), _NUM_WIDE_INVALID
+        except Exception as e:
+            return dash.no_update, _err(f"✗ {e}"), _NUM_WIDE
+        try: disp = f"{amp.sine_amplitude():.4f} Vrms"
+        except Exception: disp = f"{float(v):.4f} Vrms"
+        return disp, _ok(f"✓ {disp}"), _NUM_WIDE
 
     # ── Reference Source ──────────────────────────────────────────────────────
     @app.callback(Output("out-ref-src","children"), Input("btn-read-ref-src","n_clicks"),
@@ -973,12 +1028,20 @@ def create_app(amp):
     def cb_rd_src(_):
         i = amp.reference_source(); return _SRC_LABELS[i]
 
-    @app.callback(Output("status-ref-src","children"), Input("btn-set-ref-src","n_clicks"),
-                  State("in-ref-src","value"), prevent_initial_call=True)
+    @app.callback(
+        Output("out-ref-src",    "children", allow_duplicate=True),
+        Output("status-ref-src", "children"),
+        Input("btn-set-ref-src", "n_clicks"),
+        State("in-ref-src",      "value"),
+        prevent_initial_call=True,
+    )
     def cb_st_src(_, v):
-        if v is None: return _warn("⚠ Select a value first.")
-        try: amp.set_reference_source(int(v)); return _ok(f"✓ {_SRC_LABELS[int(v)]}")
-        except ValueError as e: return _err(f"✗ {e}")
+        if v is None: return dash.no_update, _warn("⚠ Select a value first.")
+        try: amp.set_reference_source(int(v))
+        except Exception as e: return dash.no_update, _err(f"✗ {e}")
+        try: disp = _SRC_LABELS[amp.reference_source()]
+        except Exception: disp = _SRC_LABELS.get(int(v), str(v))
+        return disp, _ok(f"✓ {disp}")
 
     # ── Reference Trigger ─────────────────────────────────────────────────────
     @app.callback(Output("out-ref-trig","children"), Input("btn-read-ref-trig","n_clicks"),
@@ -986,28 +1049,47 @@ def create_app(amp):
     def cb_rd_trig(_):
         i = amp.reference_trigger(); return _TRIG_LABELS[i]
 
-    @app.callback(Output("status-ref-trig","children"), Input("btn-set-ref-trig","n_clicks"),
-                  State("in-ref-trig","value"), prevent_initial_call=True)
+    @app.callback(
+        Output("out-ref-trig",    "children", allow_duplicate=True),
+        Output("status-ref-trig", "children"),
+        Input("btn-set-ref-trig", "n_clicks"),
+        State("in-ref-trig",      "value"),
+        prevent_initial_call=True,
+    )
     def cb_st_trig(_, v):
-        if v is None: return _warn("⚠ Select a value first.")
-        try: amp.set_reference_trigger(int(v)); return _ok(f"✓ {_TRIG_LABELS[int(v)]}")
-        except ValueError as e: return _err(f"✗ {e}")
+        if v is None: return dash.no_update, _warn("⚠ Select a value first.")
+        try: amp.set_reference_trigger(int(v))
+        except Exception as e: return dash.no_update, _err(f"✗ {e}")
+        try: disp = _TRIG_LABELS[amp.reference_trigger()]
+        except Exception: disp = _TRIG_LABELS.get(int(v), str(v))
+        return disp, _ok(f"✓ {disp}")
 
     # ── Detection Harmonic ────────────────────────────────────────────────────
     @app.callback(Output("out-harmonic","children"), Input("btn-read-harmonic","n_clicks"),
                   prevent_initial_call=True)
     def cb_rd_harm(_): return f"{amp.detection_harmonic()}"
 
-    @app.callback(Output("status-harmonic","children"), Output("in-harmonic","style"),
-                  Input("btn-set-harmonic","n_clicks"), State("in-harmonic","value"),
-                  prevent_initial_call=True)
+    @app.callback(
+        Output("out-harmonic",    "children", allow_duplicate=True),
+        Output("status-harmonic", "children"),
+        Output("in-harmonic",     "style"),
+        Input("btn-set-harmonic", "n_clicks"),
+        State("in-harmonic",      "value"),
+        prevent_initial_call=True,
+    )
     def cb_st_harm(_, v):
-        if v is None: return _warn("⚠ Enter a value first."), _NUM_WIDE
+        if v is None: return dash.no_update, _warn("⚠ Enter a value first."), _NUM_WIDE
         try:
             i = int(v)
             if not 1 <= i <= 19999: raise ValueError(f"Harmonic {i} out of range (1–19999).")
-            amp.set_detection_harmonic(i); return _ok(f"✓ {i}"), _NUM_WIDE
-        except ValueError as e: return _err(f"✗ {e}"), _NUM_WIDE_INVALID
+            amp.set_detection_harmonic(i)
+        except ValueError as e:
+            return dash.no_update, _err(f"✗ {e}"), _NUM_WIDE_INVALID
+        except Exception as e:
+            return dash.no_update, _err(f"✗ {e}"), _NUM_WIDE
+        try: disp = f"{amp.detection_harmonic()}"
+        except Exception: disp = str(int(v))
+        return disp, _ok(f"✓ {disp}"), _NUM_WIDE
 
     # ── Sensitivity ───────────────────────────────────────────────────────────
     @app.callback(Output("out-sensitivity","children"), Input("btn-read-sensitivity","n_clicks"),
@@ -1015,12 +1097,20 @@ def create_app(amp):
     def cb_rd_sens(_):
         i = amp.sensitivity(); return _sl(i)
 
-    @app.callback(Output("status-sensitivity","children"), Input("btn-set-sensitivity","n_clicks"),
-                  State("in-sensitivity","value"), prevent_initial_call=True)
+    @app.callback(
+        Output("out-sensitivity",    "children", allow_duplicate=True),
+        Output("status-sensitivity", "children"),
+        Input("btn-set-sensitivity", "n_clicks"),
+        State("in-sensitivity",      "value"),
+        prevent_initial_call=True,
+    )
     def cb_st_sens(_, v):
-        if v is None: return _warn("⚠ Select a value first.")
-        try: i=int(v); amp.set_sensitivity(i); return _ok(f"✓ {_sl(i)}")
-        except ValueError as e: return _err(f"✗ {e}")
+        if v is None: return dash.no_update, _warn("⚠ Select a value first.")
+        try: amp.set_sensitivity(int(v))
+        except Exception as e: return dash.no_update, _err(f"✗ {e}")
+        try: disp = _sl(amp.sensitivity())
+        except Exception: disp = _sl(int(v))
+        return disp, _ok(f"✓ {disp}")
 
     # ── Reserve Mode ──────────────────────────────────────────────────────────
     @app.callback(Output("out-reserve","children"), Input("btn-read-reserve","n_clicks"),
@@ -1028,12 +1118,20 @@ def create_app(amp):
     def cb_rd_res(_):
         i = amp.reserve_mode(); return _rl(i)
 
-    @app.callback(Output("status-reserve","children"), Input("btn-set-reserve","n_clicks"),
-                  State("in-reserve","value"), prevent_initial_call=True)
+    @app.callback(
+        Output("out-reserve",    "children", allow_duplicate=True),
+        Output("status-reserve", "children"),
+        Input("btn-set-reserve", "n_clicks"),
+        State("in-reserve",      "value"),
+        prevent_initial_call=True,
+    )
     def cb_st_res(_, v):
-        if v is None: return _warn("⚠ Select a value first.")
-        try: i=int(v); amp.set_reserve_mode(i); return _ok(f"✓ {_rl(i)}")
-        except ValueError as e: return _err(f"✗ {e}")
+        if v is None: return dash.no_update, _warn("⚠ Select a value first.")
+        try: amp.set_reserve_mode(int(v))
+        except Exception as e: return dash.no_update, _err(f"✗ {e}")
+        try: disp = _rl(amp.reserve_mode())
+        except Exception: disp = _rl(int(v))
+        return disp, _ok(f"✓ {disp}")
 
     # ── Time Constant ─────────────────────────────────────────────────────────
     @app.callback(Output("out-time-constant","children"), Input("btn-read-time-constant","n_clicks"),
@@ -1041,12 +1139,20 @@ def create_app(amp):
     def cb_rd_tc(_):
         i = amp.time_constant(); return _tl(i)
 
-    @app.callback(Output("status-time-constant","children"), Input("btn-set-time-constant","n_clicks"),
-                  State("in-time-constant","value"), prevent_initial_call=True)
+    @app.callback(
+        Output("out-time-constant",    "children", allow_duplicate=True),
+        Output("status-time-constant", "children"),
+        Input("btn-set-time-constant", "n_clicks"),
+        State("in-time-constant",      "value"),
+        prevent_initial_call=True,
+    )
     def cb_st_tc(_, v):
-        if v is None: return _warn("⚠ Select a value first.")
-        try: i=int(v); amp.set_time_constant(i); return _ok(f"✓ {_tl(i)}")
-        except ValueError as e: return _err(f"✗ {e}")
+        if v is None: return dash.no_update, _warn("⚠ Select a value first.")
+        try: amp.set_time_constant(int(v))
+        except Exception as e: return dash.no_update, _err(f"✗ {e}")
+        try: disp = _tl(amp.time_constant())
+        except Exception: disp = _tl(int(v))
+        return disp, _ok(f"✓ {disp}")
 
     # ── Filter Slope ──────────────────────────────────────────────────────────
     @app.callback(Output("out-filter-slope","children"), Input("btn-read-filter-slope","n_clicks"),
@@ -1054,12 +1160,20 @@ def create_app(amp):
     def cb_rd_fs(_):
         i = amp.low_pass_filter_slope(); return _fl(i)
 
-    @app.callback(Output("status-filter-slope","children"), Input("btn-set-filter-slope","n_clicks"),
-                  State("in-filter-slope","value"), prevent_initial_call=True)
+    @app.callback(
+        Output("out-filter-slope",    "children", allow_duplicate=True),
+        Output("status-filter-slope", "children"),
+        Input("btn-set-filter-slope", "n_clicks"),
+        State("in-filter-slope",      "value"),
+        prevent_initial_call=True,
+    )
     def cb_st_fs(_, v):
-        if v is None: return _warn("⚠ Select a value first.")
-        try: i=int(v); amp.set_low_pass_filter_slope(i); return _ok(f"✓ {_fl(i)}")
-        except ValueError as e: return _err(f"✗ {e}")
+        if v is None: return dash.no_update, _warn("⚠ Select a value first.")
+        try: amp.set_low_pass_filter_slope(int(v))
+        except Exception as e: return dash.no_update, _err(f"✗ {e}")
+        try: disp = _fl(amp.low_pass_filter_slope())
+        except Exception: disp = _fl(int(v))
+        return disp, _ok(f"✓ {disp}")
 
     # ── Synchronous Filter ────────────────────────────────────────────────────
     @app.callback(Output("out-sync-filter","children"), Input("btn-read-sync-filter","n_clicks"),
@@ -1067,12 +1181,20 @@ def create_app(amp):
     def cb_rd_syn(_):
         i = amp.synchronous_filter(); return _SYNC_LABELS[i]
 
-    @app.callback(Output("status-sync-filter","children"), Input("btn-set-sync-filter","n_clicks"),
-                  State("in-sync-filter","value"), prevent_initial_call=True)
+    @app.callback(
+        Output("out-sync-filter",    "children", allow_duplicate=True),
+        Output("status-sync-filter", "children"),
+        Input("btn-set-sync-filter", "n_clicks"),
+        State("in-sync-filter",      "value"),
+        prevent_initial_call=True,
+    )
     def cb_st_syn(_, v):
-        if v is None: return _warn("⚠ Select a value first.")
-        try: i=int(v); amp.set_synchronous_filter(i); return _ok(f"✓ {_SYNC_LABELS[i]}")
-        except ValueError as e: return _err(f"✗ {e}")
+        if v is None: return dash.no_update, _warn("⚠ Select a value first.")
+        try: amp.set_synchronous_filter(int(v))
+        except Exception as e: return dash.no_update, _err(f"✗ {e}")
+        try: disp = _SYNC_LABELS[amp.synchronous_filter()]
+        except Exception: disp = _SYNC_LABELS.get(int(v), str(v))
+        return disp, _ok(f"✓ {disp}")
 
     # ── Input Configuration ───────────────────────────────────────────────────
     @app.callback(Output("out-input-cfg","children"), Input("btn-read-input-cfg","n_clicks"),
@@ -1080,12 +1202,22 @@ def create_app(amp):
     def cb_rd_icfg(_):
         i = amp.input_configuration(); return _CFG_LABELS[i]
 
-    @app.callback(Output("status-input-cfg","children"), Input("btn-set-input-cfg","n_clicks"),
-                  State("in-input-cfg","value"), prevent_initial_call=True)
+    @app.callback(
+        Output("out-input-cfg",    "children", allow_duplicate=True),
+        Output("status-input-cfg", "children"),
+        Input("btn-set-input-cfg", "n_clicks"),
+        State("in-input-cfg",      "value"),
+        prevent_initial_call=True,
+    )
     def cb_st_icfg(_, v):
-        if v is None: return _warn("⚠ Select a value first.")
-        try: amp.set_input_configuration(int(v)); return _ok(f"✓ {_CFG_LABELS[int(v)]}")
-        except ValueError as e: return _err(f"✗ {e}")
+        if v is None: return dash.no_update, _warn("⚠ Select a value first.")
+        try: amp.set_input_configuration(int(v))
+        except Exception as e: return dash.no_update, _err(f"✗ {e}")
+        try: disp = _CFG_LABELS[amp.input_configuration()]
+        except Exception: disp = _CFG_LABELS.get(int(v), str(v))
+        if int(v) in (2, 3):
+            return disp, _warn(f"✓ {disp}  (current mode — instrument may override grounding & coupling)")
+        return disp, _ok(f"✓ {disp}")
 
     # ── Input Shield Grounding ────────────────────────────────────────────────
     @app.callback(Output("out-input-gnd","children"), Input("btn-read-input-gnd","n_clicks"),
@@ -1093,12 +1225,20 @@ def create_app(amp):
     def cb_rd_gnd(_):
         i = amp.input_shield_grounding(); return _GND_LABELS[i]
 
-    @app.callback(Output("status-input-gnd","children"), Input("btn-set-input-gnd","n_clicks"),
-                  State("in-input-gnd","value"), prevent_initial_call=True)
+    @app.callback(
+        Output("out-input-gnd",    "children", allow_duplicate=True),
+        Output("status-input-gnd", "children"),
+        Input("btn-set-input-gnd", "n_clicks"),
+        State("in-input-gnd",      "value"),
+        prevent_initial_call=True,
+    )
     def cb_st_gnd(_, v):
-        if v is None: return _warn("⚠ Select a value first.")
-        try: amp.set_input_shield_grounding(int(v)); return _ok(f"✓ {_GND_LABELS[int(v)]}")
-        except ValueError as e: return _err(f"✗ {e}")
+        if v is None: return dash.no_update, _warn("⚠ Select a value first.")
+        try: amp.set_input_shield_grounding(int(v))
+        except Exception as e: return dash.no_update, _err(f"✗ {e}")
+        try: disp = _GND_LABELS[amp.input_shield_grounding()]
+        except Exception: disp = _GND_LABELS.get(int(v), str(v))
+        return disp, _ok(f"✓ {disp}")
 
     # ── Input Coupling ────────────────────────────────────────────────────────
     @app.callback(Output("out-input-cpl","children"), Input("btn-read-input-cpl","n_clicks"),
@@ -1106,12 +1246,20 @@ def create_app(amp):
     def cb_rd_cpl(_):
         i = amp.input_coupling(); return _CPL_LABELS[i]
 
-    @app.callback(Output("status-input-cpl","children"), Input("btn-set-input-cpl","n_clicks"),
-                  State("in-input-cpl","value"), prevent_initial_call=True)
+    @app.callback(
+        Output("out-input-cpl",    "children", allow_duplicate=True),
+        Output("status-input-cpl", "children"),
+        Input("btn-set-input-cpl", "n_clicks"),
+        State("in-input-cpl",      "value"),
+        prevent_initial_call=True,
+    )
     def cb_st_cpl(_, v):
-        if v is None: return _warn("⚠ Select a value first.")
-        try: amp.set_input_coupling(int(v)); return _ok(f"✓ {_CPL_LABELS[int(v)]}")
-        except ValueError as e: return _err(f"✗ {e}")
+        if v is None: return dash.no_update, _warn("⚠ Select a value first.")
+        try: amp.set_input_coupling(int(v))
+        except Exception as e: return dash.no_update, _err(f"✗ {e}")
+        try: disp = _CPL_LABELS[amp.input_coupling()]
+        except Exception: disp = _CPL_LABELS.get(int(v), str(v))
+        return disp, _ok(f"✓ {disp}")
 
     # ── Line Notch Filter ─────────────────────────────────────────────────────
     @app.callback(Output("out-notch","children"), Input("btn-read-notch","n_clicks"),
@@ -1119,12 +1267,20 @@ def create_app(amp):
     def cb_rd_notch(_):
         i = amp.input_line_notch_filter(); return _NOTCH_LABELS[i]
 
-    @app.callback(Output("status-notch","children"), Input("btn-set-notch","n_clicks"),
-                  State("in-notch","value"), prevent_initial_call=True)
+    @app.callback(
+        Output("out-notch",    "children", allow_duplicate=True),
+        Output("status-notch", "children"),
+        Input("btn-set-notch", "n_clicks"),
+        State("in-notch",      "value"),
+        prevent_initial_call=True,
+    )
     def cb_st_notch(_, v):
-        if v is None: return _warn("⚠ Select a value first.")
-        try: amp.set_input_line_notch_filter(int(v)); return _ok(f"✓ {_NOTCH_LABELS[int(v)]}")
-        except ValueError as e: return _err(f"✗ {e}")
+        if v is None: return dash.no_update, _warn("⚠ Select a value first.")
+        try: amp.set_input_line_notch_filter(int(v))
+        except Exception as e: return dash.no_update, _err(f"✗ {e}")
+        try: disp = _NOTCH_LABELS[amp.input_line_notch_filter()]
+        except Exception: disp = _NOTCH_LABELS.get(int(v), str(v))
+        return disp, _ok(f"✓ {disp}")
 
     # ── Aux Inputs ────────────────────────────────────────────────────────────
     for _ch in range(1, 5):
@@ -1426,11 +1582,11 @@ def create_app(amp):
             if t == "btn-set-ddef1":
                 amp.set_display_config(1, int(p1 or 0), int(r1 or 0))
                 if f1 is not None: amp.set_front_panel_output(1, int(f1))
-                return _ok(f"✓ CH1 → {amp.DISPLAY_PARAM[int(p1 or 0)]}")
+                return _ok(f"✓ CH1 → {amp.CH1_DISPLAY_PARAM[int(p1 or 0)]}")
             if t == "btn-set-ddef2":
                 amp.set_display_config(2, int(p2 or 0), int(r2 or 0))
                 if f2 is not None: amp.set_front_panel_output(2, int(f2))
-                return _ok(f"✓ CH2 → {amp.DISPLAY_PARAM[int(p2 or 0)]}")
+                return _ok(f"✓ CH2 → {amp.CH2_DISPLAY_PARAM[int(p2 or 0)]}")
         except Exception as e:
             return _err(f"✗ {e}")
         return ""
